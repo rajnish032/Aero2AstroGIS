@@ -1,0 +1,124 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base Styles and Reset */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  line-height: 1.6;
+}
+
+/* Theme Variables */
+:root {
+  --radial-color: rgba(255, 255, 255, 0.2);
+}
+
+[data-theme="dark"] {
+  --background: #1f2937; /* Gray-800 */
+  --text: #ffffff;
+  --primary: #60a5fa; /* Blue for active links */
+  --muted: #9ca3af;
+}
+
+[data-theme="light"] {
+  --background: #ffffff;
+  --text: #1f2937;
+  --primary: #2563eb;
+  --muted: #6b7280;
+  --radial-color: rgba(0, 0, 0, 0.1);
+}
+
+/* Custom Colors */
+.text-primary {
+  color: var(--primary);
+}
+
+.text-muted {
+  color: var(--muted);
+}
+
+.text-blue-300 {
+  color: #93c5fd; /* Lighter blue for hover state */
+}
+
+/* Animations */
+
+/* FadeIn Animation (used in Register component) */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 1s ease-in-out;
+}
+
+/* SlideIn Animation (used in FeatureSection, Hero, etc.) */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slideIn {
+  animation: slideIn 0.8s ease-out forwards;
+}
+
+/* Pulse Animation (used in Hero for timeline dots) */
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+.animate-pulse {
+  animation: pulse 2s infinite ease-in-out;
+}
+
+/* Smooth Transitions */
+.transition-all {
+  transition: all 0.3s ease-in-out;
+}
+
+/* Focus Styles for Accessibility */
+:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px #60a5fa;
+}
+
+/* Text Shadow for Nav Items (to enhance visibility) */
+.text-white {
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
