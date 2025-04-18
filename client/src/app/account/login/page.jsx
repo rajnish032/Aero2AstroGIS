@@ -5,6 +5,9 @@ import { loginSchema } from "@/validation/schemas";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { useLoginUserMutation } from "@/lib/services/auth";
+import Cookies from "universal-cookie";
+
+const cookies = new Cookies(null, { path: "/", sameSite: "lax" });
 
 const Login = () => {
   const [errorMessage, setErrorMessage] = useState("");
@@ -15,24 +18,17 @@ const Login = () => {
   const [loginUser] = useLoginUserMutation();
 
   useEffect(() => {
-    const token = document.cookie
-      .split("; ")
-      .find((row) => row.startsWith("accessToken="))
-      ?.split("=")[1];
-    
+    const token = cookies.get("accessToken");
+
     if (token) {
       checkGISStatus();
     }
-  }, [router]);
+  }, []);
 
   const checkGISStatus = () => {
-    const userCookie = document.cookie
-      .split("; ")
-      .find((row) => row.startsWith("user="))
-      ?.split("=")[1];
-    
-    if (userCookie) {
-      const user = JSON.parse(decodeURIComponent(userCookie));
+    const user = cookies.get("user");
+
+    if (user) {
       if (user.isGISRegistered) {
         router.push("/gis/dashboard");
       } else {
@@ -47,18 +43,39 @@ const Login = () => {
     onSubmit: async (values, { resetForm }) => {
       setLoading(true);
       setErrorMessage("");
+
       try {
         const response = await loginUser(values).unwrap();
-        
+
         if (response?.status === "success") {
           // Set cookies
-          document.cookie = `accessToken=${response.access_token}; path=/; max-age=3600`;
-          document.cookie = `user=${JSON.stringify(response.user || {})}; path=/; max-age=3600`;
-          
+          cookies.set("accessToken", response.access_token, {
+            path: "/",
+            maxAge: 3600,
+            sameSite: "lax",
+          });
+
+          cookies.set("user", response.user, {
+            path: "/",
+            maxAge: 3600,
+            sameSite: "lax",
+          });
+
+          // document.cookie = `accessToken=${response.access_token}; path=/; max-age=3600; SameSite=Lax`;
+          // document.cookie = `user=${encodeURIComponent(JSON.stringify(response.user || {}))}; path=/; max-age=3600; SameSite=Lax`;
+
+          // const expirationDate = new Date(Date.now() + 3600 * 1000); // 1 hour from now
+          // cookies.set("auth", token, {
+          //   path: "/",
+          //   expires: expirationDate,
+          //   sameSite: "lax",
+          // });
+
+          //const auth = cookies.get('auth');
           // Show success message
           setShowSuccess(true);
-          
-          // Hide message and redirect after 1.5 seconds
+
+          // Redirect after delay
           setTimeout(() => {
             if (response.user.isGISRegistered) {
               router.push("/gis/dashboard");
@@ -66,7 +83,7 @@ const Login = () => {
               router.push("/gis/profile");
             }
           }, 1500);
-          
+
           resetForm();
         } else {
           setErrorMessage("Login failed. Please try again.");
