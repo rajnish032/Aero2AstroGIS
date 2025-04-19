@@ -7,7 +7,7 @@ import axios from "axios";
 import Cookies from "universal-cookie";
 import toast from "react-hot-toast";
 
-const cookies = new Cookies(null, {
+const cookies = new Cookies(undefined, {
   path: "/",
   sameSite: "lax",
 });

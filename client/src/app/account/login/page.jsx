@@ -53,6 +53,7 @@ const Login = () => {
             path: "/",
             maxAge: 3600,
             sameSite: "lax",
+            secure: true,
           });
 
           cookies.set("user", response.user, {

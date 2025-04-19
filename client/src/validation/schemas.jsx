@@ -1,7 +1,7 @@
 // src/validation/schemas.jsx
 import * as Yup from "yup";
 
-// Login Schema (New)
+// Login Schema
 export const loginSchema = Yup.object({
   email: Yup.string()
     .required("Email is required")
@@ -11,7 +11,7 @@ export const loginSchema = Yup.object({
     .required("Password is required"),
 });
 
-// Register Schema (Existing)
+// Register Schema
 export const registerSchema = Yup.object({
   fullName: Yup.string().required("Full name is required"),
   email: Yup.string().required("Email is required").email("Invalid email format"),
@@ -36,7 +36,7 @@ export const registerSchema = Yup.object({
     .oneOf([Yup.ref("password"), null], "Password and Confirm Password don't match"),
 });
 
-// Reset Password Schema (Existing)
+// Reset Password Schema
 export const resetPasswordSchema = Yup.object({
   password: Yup.string()
     .min(8, "Password must be at least 8 characters")
@@ -49,12 +49,15 @@ export const resetPasswordSchema = Yup.object({
     .oneOf([Yup.ref("password"), null], "Password and Confirm Password don't match"),
 });
 
-// Reset Password Link Schema (Existing)
+// Change Password Schema (reuse resetPasswordSchema)
+export const changePasswordSchema = resetPasswordSchema;
+
+// Reset Password Link Schema
 export const resetPasswordLinkSchema = Yup.object({
   email: Yup.string().required("Email is required").email("Invalid email format"),
 });
 
-// Verify Email Schema (Existing)
+// Verify Email Schema
 export const verifyEmailSchema = Yup.object({
   email: Yup.string().required("Email is required").email("Invalid email format"),
   otp: Yup.string().matches(/^\d{4}$/, "OTP must be a 4-digit number").required("OTP is required"),
