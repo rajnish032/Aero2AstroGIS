@@ -15,9 +15,9 @@ export default function Navbar({ toggleTheme, theme }) {
   // Navigation items array
   const navItems = [
     { name: "Home", href: "https://www.aero2astro.com/" },
-    { name: "About", href: "/about" },
-    { name: "Partners", href: "/partners" },
-    { name: "FAQ's", href: "/FAQ" },
+    { name: "About", href: "/" },
+    { name: "Partners", href: "/" },
+    { name: "FAQ's", href: "/" },
     { name: "Profile", href: "/user/profile" },
   ];
 
