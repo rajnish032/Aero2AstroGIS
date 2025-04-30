@@ -3,28 +3,32 @@ const setTokensCookies = (res, accessToken, refreshToken, newAccessTokenExp, new
   const refreshTokenMaxAge = (newRefreshTokenExp - Math.floor(Date.now() / 1000)) * 1000;
   const isProduction = process.env.NODE_ENV === "production";
 
+  const commonCookieOptions = {
+    secure: isProduction,
+    path: "/",
+    sameSite: isProduction ? "none" : "lax", // Changed to "none" for cross-site cookies
+    domain: isProduction ? ".aero2-astro-gis.vercel.app" : undefined
+  };
+
+  // Access Token (HTTP Only)
   res.cookie("accessToken", accessToken, {
+    ...commonCookieOptions,
     httpOnly: true,
-    secure: isProduction,
-    maxAge: accessTokenMaxAge,
-    sameSite: isProduction ? "strict" : "lax",
-    path: "/",
+    maxAge: accessTokenMaxAge
   });
 
+  // Refresh Token (HTTP Only)
   res.cookie("refreshToken", refreshToken, {
+    ...commonCookieOptions,
     httpOnly: true,
-    secure: isProduction,
-    maxAge: refreshTokenMaxAge,
-    sameSite: isProduction ? "strict" : "lax",
-    path: "/",
+    maxAge: refreshTokenMaxAge
   });
 
+  // Auth Flag (accessible to client)
   res.cookie("is_auth", true, {
+    ...commonCookieOptions,
     httpOnly: false,
-    secure: isProduction,
-    maxAge: refreshTokenMaxAge,
-    sameSite: isProduction ? "strict" : "lax",
-    path: "/",
+    maxAge: refreshTokenMaxAge
   });
 };
 

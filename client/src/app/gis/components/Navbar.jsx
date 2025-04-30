@@ -7,10 +7,8 @@ import axios from "axios";
 import Cookies from "universal-cookie";
 import toast from "react-hot-toast";
 
-const cookies = new Cookies(undefined, {
-  path: "/",
-  sameSite: "lax",
-});
+
+const cookies = new Cookies(null, { path: "/", sameSite: "lax" });
 
 const Navbar = () => {
   const [user, setUser] = useState(null);

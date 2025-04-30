@@ -45,7 +45,9 @@ const Login = () => {
       setErrorMessage("");
 
       try {
-        const response = await loginUser(values).unwrap();
+        const response = await loginUser(values, {
+          credentials: 'include'
+        }).unwrap();
 
         if (response?.status === "success") {
           // Set cookies
