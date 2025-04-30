@@ -1,34 +1,69 @@
-const setTokensCookies = (res, accessToken, refreshToken, newAccessTokenExp, newRefreshTokenExp) => {
-  const accessTokenMaxAge = (newAccessTokenExp - Math.floor(Date.now() / 1000)) * 1000;
-  const refreshTokenMaxAge = (newRefreshTokenExp - Math.floor(Date.now() / 1000)) * 1000;
-  const isProduction = process.env.NODE_ENV === "production";
+// const setTokensCookies = (res, accessToken, refreshToken, newAccessTokenExp, newRefreshTokenExp) => {
+//   const accessTokenMaxAge = (newAccessTokenExp - Math.floor(Date.now() / 1000)) * 1000;
+//   const refreshTokenMaxAge = (newRefreshTokenExp - Math.floor(Date.now() / 1000)) * 1000;
+//   const isProduction = process.env.NODE_ENV === "production";
 
-  const commonCookieOptions = {
-    secure: isProduction,
+//   const commonCookieOptions = {
+//     secure: isProduction,
+//     path: "/",
+//     sameSite: isProduction ? "none" : "lax", // Changed to "none" for cross-site cookies
+//     domain: isProduction ? ".aero2-astro-gis.vercel.app" : undefined
+//   };
+
+//   // Access Token (HTTP Only)
+//   res.cookie("accessToken", accessToken, {
+//     ...commonCookieOptions,
+//     httpOnly: true,
+//     maxAge: accessTokenMaxAge
+//   });
+
+//   // Refresh Token (HTTP Only)
+//   res.cookie("refreshToken", refreshToken, {
+//     ...commonCookieOptions,
+//     httpOnly: true,
+//     maxAge: refreshTokenMaxAge
+//   });
+
+//   // Auth Flag (accessible to client)
+//   res.cookie("is_auth", true, {
+//     ...commonCookieOptions,
+//     httpOnly: false,
+//     maxAge: refreshTokenMaxAge
+//   });
+// };
+
+// export default setTokensCookies;
+
+const setTokensCookies = (res, accessToken, refreshToken, newAccessTokenExp, newRefreshTokenExp) => {
+  const isProduction = process.env.NODE_ENV === "production";
+  const cookieDomain = isProduction ? "aero2-astro-gis.vercel.app" : undefined;
+  
+  // Common cookie configuration
+  const cookieConfig = {
     path: "/",
-    sameSite: isProduction ? "none" : "lax", // Changed to "none" for cross-site cookies
-    domain: isProduction ? ".aero2-astro-gis.vercel.app" : undefined
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
+    domain: cookieDomain,
+    httpOnly: true
   };
 
-  // Access Token (HTTP Only)
+  // Set access token cookie
   res.cookie("accessToken", accessToken, {
-    ...commonCookieOptions,
-    httpOnly: true,
-    maxAge: accessTokenMaxAge
+    ...cookieConfig,
+    maxAge: (newAccessTokenExp - Math.floor(Date.now()/1000)) * 1000
   });
 
-  // Refresh Token (HTTP Only)
+  // Set refresh token cookie
   res.cookie("refreshToken", refreshToken, {
-    ...commonCookieOptions,
-    httpOnly: true,
-    maxAge: refreshTokenMaxAge
+    ...cookieConfig,
+    maxAge: (newRefreshTokenExp - Math.floor(Date.now()/1000)) * 1000
   });
 
-  // Auth Flag (accessible to client)
-  res.cookie("is_auth", true, {
-    ...commonCookieOptions,
+  // Client-readable auth flag
+  res.cookie("is_auth", "true", {
+    ...cookieConfig,
     httpOnly: false,
-    maxAge: refreshTokenMaxAge
+    maxAge: (newRefreshTokenExp - Math.floor(Date.now()/1000)) * 1000
   });
 };
 

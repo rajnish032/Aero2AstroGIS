@@ -8,7 +8,11 @@ import Cookies from "universal-cookie";
 import toast from "react-hot-toast";
 
 
-const cookies = new Cookies(null, { path: "/", sameSite: "lax" });
+const cookies = new Cookies(null, {
+  path: '/',
+  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+  secure: process.env.NODE_ENV === 'production'
+});
 
 const Navbar = () => {
   const [user, setUser] = useState(null);
