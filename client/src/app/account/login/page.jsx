@@ -9,8 +9,8 @@ import Cookies from "universal-cookie";
 
 const cookies = new Cookies(null, {
   path: '/',
-  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-  secure: process.env.NODE_ENV === 'production'
+  sameSite: 'none',
+  secure: true
 });
 
 const Login = () => {
@@ -54,35 +54,31 @@ const Login = () => {
         }).unwrap();
 
         if (response?.status === "success") {
-          // Set cookies
+          // Set cookies with consistent attributes
           cookies.set("accessToken", response.access_token, {
             path: "/",
             maxAge: 3600,
-            sameSite: "lax",
+            sameSite: "none",
             secure: true,
           });
 
-          cookies.set("user", response.user, {
+          cookies.set("refreshToken", response.refresh_token, {
             path: "/",
-            maxAge: 3600,
-            sameSite: "lax",
+            maxAge: 86400, // 1 day
+            sameSite: "none",
+            secure: true,
+            httpOnly: false // Must be false for client-side access
           });
 
-          // document.cookie = `accessToken=${response.access_token}; path=/; max-age=3600; SameSite=Lax`;
-          // document.cookie = `user=${encodeURIComponent(JSON.stringify(response.user || {}))}; path=/; max-age=3600; SameSite=Lax`;
+          cookies.set("user", JSON.stringify(response.user || {}), {
+            path: "/",
+            maxAge: 3600,
+            sameSite: "none",
+            secure: true
+          });
 
-          // const expirationDate = new Date(Date.now() + 3600 * 1000); // 1 hour from now
-          // cookies.set("auth", token, {
-          //   path: "/",
-          //   expires: expirationDate,
-          //   sameSite: "lax",
-          // });
-
-          //const auth = cookies.get('auth');
-          // Show success message
           setShowSuccess(true);
 
-          // Redirect after delay
           setTimeout(() => {
             if (response.user.isGISRegistered) {
               router.push("/gis/dashboard");
