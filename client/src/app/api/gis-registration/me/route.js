@@ -10,37 +10,44 @@ export async function GET(request) {
       );
     }
 
-    // Extract cookies from the incoming request
-    const cookies = request.cookies.getAll().reduce((acc, cookie) => {
-      acc[cookie.name] = cookie.value;
-      return acc;
-    }, {});
+    // 1. Get cookies from the incoming request more reliably
+    const cookieHeader = request.headers.get('cookie') || '';
+    
+    // 2. Verify we have authentication cookies
+    const hasAuthCookies = ['accessToken', 'refreshToken', 'is_auth'].some(cookie => 
+      cookieHeader.includes(`${cookie}=`)
+    );
+    
+    if (!hasAuthCookies) {
+      return NextResponse.json(
+        { success: false, message: "Authentication required" },
+        { status: 401 }
+      );
+    }
 
-    // Forward necessary cookies to the backend
-    const cookieString = Object.entries(cookies)
-      .map(([name, value]) => `${name}=${value}`)
-      .join('; ');
-
+    // 3. Make the request to backend with proper headers
     const response = await fetch(`${API_BASE_URL}/api/gis-registration/me`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
-        Cookie: cookieString,
+        "Cookie": cookieHeader, // Forward all cookies
       },
       credentials: "include",
     });
 
+    // 4. Handle 401 Unauthorized specifically for token refresh
+    if (response.status === 401) {
+      // Attempt token refresh here if you have refresh token logic
+      // Then retry the original request
+    }
+
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({
-        success: false,
-        message: "Failed to parse error response"
-      }));
-      
+      const errorData = await response.json().catch(() => ({}));
       return NextResponse.json(
         {
           success: false,
-          message: "Backend request failed",
-          ...errorData,
+          message: errorData.message || "Backend request failed",
+          code: errorData.code || "backend_error",
         },
         { status: response.status }
       );
@@ -48,16 +55,17 @@ export async function GET(request) {
 
     const data = await response.json();
 
-    // Forward set-cookie headers from backend to client
+    // 5. Forward cookies more reliably
     const headers = new Headers();
-    const setCookies = response.headers.getSetCookie();
-    if (setCookies && setCookies.length > 0) {
-      setCookies.forEach(cookie => {
-        headers.append('Set-Cookie', cookie);
-      });
+    const setCookies = response.headers.get('set-cookie');
+    if (setCookies) {
+      headers.set('Set-Cookie', setCookies);
     }
 
-    return new NextResponse(JSON.stringify(data), {
+    return new NextResponse(JSON.stringify({
+      success: true,
+      data
+    }), {
       status: 200,
       headers,
     });
@@ -70,7 +78,6 @@ export async function GET(request) {
         message: "Internal Server Error",
         ...(process.env.NODE_ENV === "development" && { 
           error: error.message,
-          stack: error.stack 
         }),
       },
       { status: 500 }
