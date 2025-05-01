@@ -25,10 +25,9 @@ const Navbar = () => {
     try {
       setLoading(true);
       setError(null);
-
+  
+      // First attempt with current access token
       let accessToken = cookies.get("accessToken");
-      console.log('Fetching user with accessToken:', accessToken?.substring(0, 20) + '...');
-
       let response = await axios.get(`${API_BASE_URL}/api/user/me`, {
         withCredentials: true,
         headers: accessToken ? { 
@@ -36,10 +35,10 @@ const Navbar = () => {
           'Content-Type': 'application/json'
         } : {}
       }).catch(err => err.response || err);
-
+  
+      // If 401, attempt token refresh
       if (response?.status === 401) {
         try {
-          console.log('Attempting token refresh');
           const refreshResponse = await axios.post(
             `${API_BASE_URL}/api/user/refresh-token`,
             {},
@@ -50,30 +49,32 @@ const Navbar = () => {
               }
             }
           );
-
-          if (refreshResponse.data?.access_token) {
-            console.log('Token refreshed successfully');
-            cookies.set("accessToken", refreshResponse.data.access_token, {
+  
+          if (refreshResponse.data?.accessToken) {
+            // Store new tokens
+            cookies.set("accessToken", refreshResponse.data.accessToken, {
               path: '/',
               sameSite: 'none',
               secure: true,
               maxAge: 3600
             });
-
+  
+            // Retry with new token
             response = await axios.get(`${API_BASE_URL}/api/user/me`, {
               withCredentials: true,
               headers: { 
-                Authorization: `Bearer ${refreshResponse.data.access_token}`,
+                Authorization: `Bearer ${refreshResponse.data.accessToken}`,
                 'Content-Type': 'application/json'
               }
             });
           }
         } catch (refreshError) {
-          console.error("Token refresh failed:", refreshError.response?.data || refreshError.message);
+          console.error("Token refresh failed:", refreshError);
           throw new Error("Session expired. Please login again.");
         }
       }
-
+  
+      // Handle successful response
       if (response?.data?.user) {
         setUser({
           id: response.data.user._id,
@@ -90,11 +91,12 @@ const Navbar = () => {
     } catch (error) {
       console.error("Navbar authentication error:", error);
       setError(error.message);
-
+      
+      // Clear invalid credentials
       cookies.remove("accessToken", { path: '/' });
       cookies.remove("refreshToken", { path: '/' });
       cookies.remove("is_auth", { path: '/' });
-
+      
       setUser(null);
     } finally {
       setLoading(false);
@@ -104,22 +106,16 @@ const Navbar = () => {
   useEffect(() => {
     fetchUser();
 
+    // Set up periodic token refresh (every 50 minutes)
     const refreshInterval = setInterval(() => {
       if (cookies.get("accessToken")) {
-        console.log('Running background token refresh');
         axios.post(
-          `${API_BASE_URL}/api/user/refresh-token`,
+          `${API_BASE_URL}/api/auth/refresh`,
           {},
-          { 
-            withCredentials: true,
-            headers: {
-              'Content-Type': 'application/json'
-            }
-          }
+          { withCredentials: true }
         ).then(response => {
-          if (response.data?.access_token) {
-            console.log('Background token refresh successful');
-            cookies.set("accessToken", response.data.access_token, {
+          if (response.data?.accessToken) {
+            cookies.set("accessToken", response.data.accessToken, {
               path: '/',
               sameSite: 'none',
               secure: true,
@@ -127,7 +123,7 @@ const Navbar = () => {
             });
           }
         }).catch(err => {
-          console.error("Background token refresh failed:", err.response?.data || err.message);
+          console.error("Background token refresh failed:", err);
         });
       }
     }, 50 * 60 * 1000); // 50 minutes
@@ -140,12 +136,7 @@ const Navbar = () => {
       const response = await axios.post(
         `${API_BASE_URL}/api/user/apply-approval`,
         {},
-        { 
-          withCredentials: true,
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        }
+        { withCredentials: true }
       );
 
       if (response.data.status === "success") {
@@ -157,13 +148,14 @@ const Navbar = () => {
         toast.success("Application submitted for approval!");
       }
     } catch (error) {
-      console.error("Approval error:", error.response?.data || error.message);
+      console.error("Approval error:", error);
       toast.error(error.response?.data?.message || "Failed to apply for approval");
-
+      
+      // If unauthorized, try to refresh token and retry
       if (error.response?.status === 401) {
         try {
-          await fetchUser();
-          return handleApplyForApproval();
+          await fetchUser(); // This will attempt token refresh
+          return handleApplyForApproval(); // Retry the request
         } catch (refreshError) {
           toast.error("Session expired. Please login again.");
         }
@@ -176,25 +168,21 @@ const Navbar = () => {
       const response = await axios.post(
         `${API_BASE_URL}/api/user/logout`,
         {},
-        { 
-          withCredentials: true,
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        }
+        { withCredentials: true }
       );
 
       if (response.data.status === "success") {
+        // Clear all auth cookies
         cookies.remove("accessToken", { path: "/" });
         cookies.remove("refreshToken", { path: "/" });
         cookies.remove("is_auth", { path: "/" });
-
+        
         setUser(null);
         toast.success("Logged out successfully");
         window.location.href = "/account/login";
       }
     } catch (error) {
-      console.error("Logout error:", error.response?.data || error.message);
+      console.error("Logout error:", error);
       toast.error("Failed to log out. Please try again.");
     }
   };
@@ -223,6 +211,7 @@ const Navbar = () => {
   return (
     <header className="sticky top-0 z-[2000] border-b border-blue-400 mb-5 shadow-md bg-white text-gray-700">
       <div className="max-w-screen-xl relative flex flex-wrap items-center justify-between px-3 lg:px-5">
+        {/* Logo */}
         <Link href="/" className="lg:mx-20 inline-flex overflow-hidden relative md:w-[300px] h-16 w-[150px] items-center">
           <Image
             src="/logo.png"
@@ -234,6 +223,7 @@ const Navbar = () => {
           />
         </Link>
 
+        {/* Navigation */}
         <div className="gap-3 flex text-sm lg:mx-4 lg:justify-end flex-grow items-center max-md:hidden">
           {user && (
             <Link
@@ -262,6 +252,7 @@ const Navbar = () => {
           )}
         </div>
 
+        {/* User Info */}
         <div className="items-center flex md:flex-row-reverse gap-5 relative">
           {error ? (
             <div className="flex items-center gap-2">
@@ -294,6 +285,7 @@ const Navbar = () => {
                 </p>
               </div>
 
+              {/* User Dropdown */}
               <div className="flex items-center relative">
                 <button
                   onClick={() => setShowDropdown(!showDropdown)}
