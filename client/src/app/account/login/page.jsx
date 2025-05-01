@@ -23,7 +23,6 @@ const Login = () => {
 
   useEffect(() => {
     const token = cookies.get("accessToken");
-
     if (token) {
       checkGISStatus();
     }
@@ -31,7 +30,6 @@ const Login = () => {
 
   const checkGISStatus = () => {
     const user = cookies.get("user");
-
     if (user) {
       if (user.isGISRegistered) {
         router.push("/gis/dashboard");
@@ -47,38 +45,29 @@ const Login = () => {
     onSubmit: async (values, { resetForm }) => {
       setLoading(true);
       setErrorMessage("");
-  
+
       try {
         const response = await loginUser(values, {
           credentials: 'include'
         }).unwrap();
-  
+
         if (response?.status === "success") {
-          // Set cookies with consistent attributes
           cookies.set("accessToken", response.access_token, {
             path: "/",
             maxAge: 3600,
             sameSite: "none",
             secure: true,
           });
-  
-          cookies.set("refreshToken", response.refresh_token, {
-            path: "/",
-            maxAge: 86400,
-            sameSite: "none",
-            secure: true,
-            httpOnly: false
-          });
-  
+
           cookies.set("user", JSON.stringify(response.user || {}), {
             path: "/",
             maxAge: 3600,
             sameSite: "none",
             secure: true
           });
-  
+
           setShowSuccess(true);
-  
+
           setTimeout(() => {
             if (response.user.isGISRegistered) {
               router.push("/gis/dashboard");
@@ -86,12 +75,13 @@ const Login = () => {
               router.push("/gis/profile");
             }
           }, 1500);
-  
+
           resetForm();
         } else {
           setErrorMessage("Login failed. Please try again.");
         }
       } catch (error) {
+        console.error('Login error:', error);
         setErrorMessage(error?.data?.message || "Network error. Please try again.");
       } finally {
         setLoading(false);
@@ -101,7 +91,6 @@ const Login = () => {
 
   return (
     <div className="min-h-full flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-      {/* Success Popup */}
       {showSuccess && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
           <div className="bg-white p-6 rounded-lg shadow-lg max-w-sm mx-auto">
@@ -156,7 +145,6 @@ const Login = () => {
         </div>
 
         <form onSubmit={formik.handleSubmit}>
-          {/* Email Field */}
           <div className="mb-4">
             <label htmlFor="email" className="block font-medium mb-2">
               Email
@@ -176,7 +164,6 @@ const Login = () => {
             )}
           </div>
 
-          {/* Password Field with Show/Hide Icon */}
           <div className="mb-6">
             <label htmlFor="password" className="block font-medium mb-2">
               Password
@@ -239,7 +226,6 @@ const Login = () => {
             )}
           </div>
 
-          {/* Forgot Password Link */}
           <div className="text-sm">
             <Link
               href="/account/reset-password-link"
@@ -249,7 +235,6 @@ const Login = () => {
             </Link>
           </div>
 
-          {/* Submit Button */}
           <div>
             <button
               type="submit"
@@ -262,7 +247,6 @@ const Login = () => {
           </div>
         </form>
 
-        {/* Register Link */}
         <div className="items-center relative bottom-4 gap-2 flex">
           <p>Not having account?</p>
           <Link
@@ -273,7 +257,6 @@ const Login = () => {
           </Link>
         </div>
 
-        {/* Error Message */}
         {errorMessage && (
           <div className="text-sm text-red-500 font-semibold px-2 text-center">
             {errorMessage}

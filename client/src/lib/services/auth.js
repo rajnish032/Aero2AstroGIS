@@ -4,7 +4,13 @@ const baseQuery = fetchBaseQuery({
   baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL + "/api/user/",
   credentials: "include",
   prepareHeaders: (headers, { getState }) => {
-    // You can add any custom headers here if needed
+    const token = document.cookie
+      .split("; ")
+      .find((row) => row.startsWith("accessToken="))
+      ?.split("=")[1];
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
     headers.set("Content-Type", "application/json");
     return headers;
   },
@@ -13,25 +19,25 @@ const baseQuery = fetchBaseQuery({
 const baseQueryWithReauth = async (args, api, extraOptions) => {
   let result = await baseQuery(args, api, extraOptions);
 
-  // If 401 Unauthorized, try to refresh token
   if (result.error?.status === 401) {
     console.log("Attempting token refresh...");
     const refreshResult = await baseQuery(
       {
         url: "refresh-token",
         method: "POST",
+        body: {}
       },
       api,
       extraOptions
     );
 
-    if (refreshResult.data) {
-      // Retry the original query with new token
+    if (refreshResult.data?.access_token) {
+      console.log('Token refresh successful');
+      document.cookie = `accessToken=${refreshResult.data.access_token}; path=/; max-age=3600; SameSite=None; Secure`;
       result = await baseQuery(args, api, extraOptions);
     } else {
-      // Refresh failed - logout the user
+      console.error('Token refresh failed:', refreshResult.error);
       await baseQuery({ url: "logout", method: "POST" }, api, extraOptions);
-      // You can dispatch a logout action here if needed
     }
   }
 

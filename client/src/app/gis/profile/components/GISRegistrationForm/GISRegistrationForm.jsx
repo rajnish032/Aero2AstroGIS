@@ -76,7 +76,7 @@ const createInitialFormData = (userData) => ({
 
 export default function GISRegistrationForm() {
   const router = useRouter();
-  const { data: userData, isSuccess: userDataLoaded } = useGetUserQuery();
+  const { data: userData, isSuccess: userDataLoaded, error: userError, isFetching } = useGetUserQuery();
   const [activeTab, setActiveTab] = useState(1);
   const [workSamples, setWorkSamples] = useState([]);
   const [errors, setErrors] = useState({});
@@ -92,59 +92,67 @@ export default function GISRegistrationForm() {
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
+    console.log('Component mounting, userData:', userData, 'userError:', userError, 'isFetching:', isFetching);
     setIsMounted(true);
-    if (userDataLoaded) {
+    if (userDataLoaded && !isFetching) {
+      console.log('User data loaded, loading draft...');
       loadDraftData();
     }
-  }, [userDataLoaded]);
+    if (userError) {
+      console.error('User fetch error:', userError);
+      setServerMessage({
+        type: "error",
+        message: userError.status === 401 
+          ? "Session expired. Please login again."
+          : "Failed to load user data. Please try again."
+      });
+      setIsLoading(false);
+      if (userError.status === 401) {
+        router.push("/account/login");
+      }
+    }
+  }, [userDataLoaded, userError, isFetching, router]);
 
   useEffect(() => {
-    if (userDataLoaded && userData) {
+    if (userDataLoaded && userData?.user) {
+      console.log('Updating form data with user:', userData.user);
       setFormData(prev => ({
         ...prev,
-        fullName: userData.name || prev.fullName,
-        contactNumber: userData.phoneNumber || prev.contactNumber,
-        countryCode: userData.countryCode || prev.countryCode,
-        email: userData.email || prev.email,
-        address: userData.address || prev.address,
-        pinCode: userData.areaPin || prev.pinCode,
-        locality: userData.locality || prev.locality,
-        city: userData.city || prev.city,
-        state: userData.state || prev.state
+        fullName: userData.user.name || prev.fullName,
+        contactNumber: userData.user.phoneNumber || prev.contactNumber,
+        countryCode: userData.user.countryCode || prev.countryCode,
+        email: userData.user.email || prev.email,
+        address: userData.user.address || prev.address,
+        pinCode: userData.user.areaPin || prev.pinCode,
+        locality: userData.user.locality || prev.locality,
+        city: userData.user.city || prev.city,
+        state: userData.user.state || prev.state
       }));
     }
   }, [userData, userDataLoaded]);
 
   const loadDraftData = useCallback(async () => {
     try {
-      const token = document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("accessToken="))
-        ?.split("=")[1];
-
-      if (!token) {
-        setIsLoading(false);
-        setHasDraft(false);
-        return;
-      }
-
+      setIsLoading(true);
+      console.log('Fetching draft data...');
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/gis-registration/draft`, {
         method: "GET",
         credentials: "include",
         headers: {
-          "Authorization": `Bearer ${token}`,
           "Content-Type": "application/json"
         },
       });
 
+      console.log('Draft fetch response:', response.status);
       if (response.ok) {
         const { exists, draftData } = await response.json();
+        console.log('Draft data:', { exists, draftData });
         
         if (exists && draftData) {
           const parsedProjects = 
             typeof draftData.projects === 'string' 
               ? JSON.parse(draftData.projects) 
-              : draftData.projects || createInitialFormData(userData).projects;
+              : draftData.projects || createInitialFormData(userData?.user).projects;
           
           const parsedSavedTabs = 
             typeof draftData.savedTabs === 'string'
@@ -152,13 +160,13 @@ export default function GISRegistrationForm() {
               : (draftData.savedTabs || []).map(Number);
 
           setFormData(prev => ({
-            ...createInitialFormData(userData),
+            ...createInitialFormData(userData?.user),
             ...draftData,
             projects: parsedProjects,
             savedTabs: parsedSavedTabs,
-            fullName: userData?.name || draftData.fullName || "",
-            contactNumber: userData?.phoneNumber || draftData.contactNumber || "",
-            email: userData?.email || draftData.email || ""
+            fullName: userData?.user?.name || draftData.fullName || "",
+            contactNumber: userData?.user?.phoneNumber || draftData.contactNumber || "",
+            email: userData?.user?.email || draftData.email || ""
           }));
           
           setActiveTab(draftData.lastSavedTab || 1);
@@ -168,7 +176,15 @@ export default function GISRegistrationForm() {
         } else {
           setHasDraft(false);
         }
+      } else if (response.status === 401) {
+        console.error('Unauthorized draft fetch');
+        setServerMessage({
+          type: "error",
+          message: "Session expired. Please login again."
+        });
+        router.push("/account/login");
       } else {
+        console.error('Draft fetch failed:', response.status);
         setHasDraft(false);
       }
     } catch (error) {
@@ -176,15 +192,16 @@ export default function GISRegistrationForm() {
       setHasDraft(false);
       setServerMessage({
         type: "error",
-        message: "Failed to load draft data"
+        message: "Failed to load draft data: " + error.message
       });
     } finally {
       setIsLoading(false);
     }
-  }, [userData]);
+  }, [userData, router]);
 
   const handleChange = useCallback((e) => {
     const { name, value, type, checked, files } = e.target;
+    console.log('Handling change:', { name, value, type });
     if (type === "file") {
       setFormData((prev) => ({ ...prev, [name]: files[0] }));
     } else if (name === "dob") {
@@ -207,6 +224,7 @@ export default function GISRegistrationForm() {
 
   const handleArrayChange = useCallback((e, field) => {
     const { value, checked } = e.target;
+    console.log('Handling array change:', { field, value, checked });
     setFormData((prev) => ({
       ...prev,
       [field]: checked
@@ -216,6 +234,7 @@ export default function GISRegistrationForm() {
   }, []);
 
   const handleProjectChange = useCallback((index, field, value) => {
+    console.log('Handling project change:', { index, field, value });
     setFormData((prev) => {
       const updatedProjects = [...prev.projects];
       updatedProjects[index] = { ...updatedProjects[index], [field]: value };
@@ -224,6 +243,7 @@ export default function GISRegistrationForm() {
   }, []);
 
   const addProject = useCallback(() => {
+    console.log('Adding new project');
     setFormData((prev) => ({
       ...prev,
       projects: [
@@ -236,6 +256,7 @@ export default function GISRegistrationForm() {
   const handleWorkSampleUpload = useCallback(
     (e) => {
       const files = Array.from(e.target.files);
+      console.log('Uploading work samples:', files.length);
       if (files.length + workSamples.length > 5) {
         setServerMessage({
           type: "error",
@@ -250,6 +271,7 @@ export default function GISRegistrationForm() {
 
   const handleImageUpload = useCallback((e) => {
     const file = e.target.files[0];
+    console.log('Uploading profile image:', file?.name);
     if (!file) return;
     const validTypes = ["image/jpeg", "image/png"];
     if (!validTypes.includes(file.type)) {
@@ -270,6 +292,7 @@ export default function GISRegistrationForm() {
   }, []);
 
   const getTabData = (tabNumber, formData) => {
+    console.log('Getting tab data for tab:', tabNumber);
     switch (tabNumber) {
       case 1:
         return {
@@ -359,6 +382,7 @@ export default function GISRegistrationForm() {
       e.preventDefault();
       setIsSubmitting(true);
       setServerMessage({ type: "", message: "" });
+      console.log('Submitting form, isDraft:', isDraft);
 
       if (!isDraft) {
         const requiredFields = [
@@ -393,6 +417,7 @@ export default function GISRegistrationForm() {
         }
 
         if (Object.keys(newErrors).length > 0) {
+          console.log('Validation errors:', newErrors);
           setErrors(newErrors);
           setServerMessage({ type: "error", message: "Please fix the errors before submitting" });
           setIsSubmitting(false);
@@ -411,36 +436,50 @@ export default function GISRegistrationForm() {
         }
         workSamples.forEach((file) => fileFormData.append("workSamples", file));
 
-        const endpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/gis-registration/submit`;
-        const response = await fetch(endpoint, {
-          method: "POST",
-          body: fileFormData,
-          credentials: "include",
-        });
+        try {
+          const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/gis-registration/submit`, {
+            method: "POST",
+            body: fileFormData,
+            credentials: "include",
+          });
 
-        if (!response.ok) {
-          const errorData = await response.json();
+          console.log('Submission response:', response.status);
+          if (!response.ok) {
+            const errorData = await response.json();
+            console.error('Submission error:', errorData);
+            setServerMessage({
+              type: "error",
+              message: `Submission failed: ${errorData.message}`,
+              errors: errorData.errors || [],
+            });
+            setErrors(
+              errorData.errors?.reduce((acc, err) => ({ ...acc, [err.field]: err.message }), {}) || {}
+            );
+            setIsSubmitting(false);
+            if (response.status === 401) {
+              router.push("/account/login");
+            }
+            throw new Error(errorData.message);
+          }
+
+          const data = await response.json();
+          console.log('Submission successful:', data);
+          setServerMessage({
+            type: "success",
+            message: "Registration successful! Redirecting...",
+          });
+          setTimeout(() => {
+            setFormData(createInitialFormData());
+            router.push("/gis/dashboard");
+          }, 1500);
+        } catch (error) {
+          console.error('Submission error:', error);
           setServerMessage({
             type: "error",
-            message: `Submission failed: ${errorData.message}`,
-            errors: errorData.errors || [],
+            message: `Submission failed: ${error.message}`
           });
-          setErrors(
-            errorData.errors?.reduce((acc, err) => ({ ...acc, [err.field]: err.message }), {}) || {}
-          );
           setIsSubmitting(false);
-          throw new Error(errorData.message);
         }
-
-        const data = await response.json();
-        setServerMessage({
-          type: "success",
-          message: "Registration successful! Redirecting...",
-        });
-        setTimeout(() => {
-          setFormData(createInitialFormData());
-          router.push("/gis/dashboard");
-        }, 1500);
       } else {
         const tabData = getTabData(activeTab, formData);
         const fileFormData = new FormData();
@@ -468,37 +507,55 @@ export default function GISRegistrationForm() {
             credentials: "include",
           });
 
+          console.log('Draft save response:', response.status);
           if (!response.ok) {
             const errorData = await response.json();
+            console.error('Draft save error:', errorData);
+            setServerMessage({
+              type: "error",
+              message: `Failed to save draft: ${errorData.message}`
+            });
+            setIsSubmitting(false);
+            if (response.status === 401) {
+              router.push("/account/login");
+            }
             throw new Error(errorData.message || "Failed to save draft");
           }
 
           const data = await response.json();
+          console.log('Draft saved:', data);
           setSavedTabs((prev) => [...new Set([...prev, activeTab])]);
           setDisabledTabs((prev) => [...new Set([...prev, activeTab])]);
           setServerMessage({ type: "success", message: `Tab ${activeTab} saved successfully!` });
         } catch (err) {
+          console.error('Draft save error:', err);
           setServerMessage({ type: "error", message: `Error: ${err.message}` });
         } finally {
           setIsSubmitting(false);
         }
       }
     },
-    [formData, activeTab, workSamples, router]
+    [formData, activeTab, workSamples, router, userData]
   );
 
   const handleStartNewForm = useCallback(async () => {
     if (!confirm("Are you sure you want to start a new form? Your draft will be deleted."))
       return;
     try {
+      console.log('Deleting draft...');
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/gis-registration/draft`,
         {
           method: "DELETE",
           credentials: "include",
+          headers: {
+            "Content-Type": "application/json"
+          }
         }
       );
+      console.log('Draft delete response:', response.status);
       if (response.ok) {
+        console.log('Draft deleted successfully');
         setFormData(createInitialFormData());
         setActiveTab(1);
         setSavedTabs([]);
@@ -510,15 +567,24 @@ export default function GISRegistrationForm() {
           message: "Draft deleted successfully",
         });
       } else {
-        throw new Error("Failed to delete draft");
+        const errorData = await response.json();
+        console.error('Draft delete error:', errorData);
+        setServerMessage({
+          type: "error",
+          message: `Failed to delete draft: ${errorData.message}`
+        });
+        if (response.status === 401) {
+          router.push("/account/login");
+        }
       }
     } catch (error) {
       console.error("Error deleting draft:", error);
-      setServerMessage({ type: "error", message: "Failed to delete draft" });
+      setServerMessage({ type: "error", message: "Failed to delete draft: " + error.message });
     }
-  }, []);
+  }, [router]);
 
   const handleTabChange = useCallback((tabNumber) => {
+    console.log('Changing to tab:', tabNumber);
     setVisitedTabs((prev) => new Set([...prev, tabNumber]));
     setActiveTab(tabNumber);
     if (tabRefs.current[tabNumber - 1]) {
@@ -564,6 +630,7 @@ export default function GISRegistrationForm() {
       }
 
       setErrors(newErrors);
+      console.log('Validation errors:', newErrors);
       return Object.keys(newErrors).length === 0;
     },
     [formData]
@@ -571,6 +638,7 @@ export default function GISRegistrationForm() {
 
   const handleNext = useCallback(() => {
     if (validateForm(activeTab)) {
+      console.log('Moving to next tab:', activeTab + 1);
       setActiveTab((prev) => Math.min(prev + 1, 8));
       setVisitedTabs((prev) => new Set([...prev, activeTab + 1]));
     } else {
@@ -582,14 +650,17 @@ export default function GISRegistrationForm() {
   }, [activeTab, validateForm]);
 
   const handlePrev = useCallback(() => {
-    if (activeTab > 1) setActiveTab(activeTab - 1);
+    if (activeTab > 1) {
+      console.log('Moving to previous tab:', activeTab - 1);
+      setActiveTab(activeTab - 1);
+    }
   }, [activeTab]);
 
   if (!isMounted) {
     return null;
   }
 
-  if (isLoading) {
+  if (isLoading || isFetching) {
     return (
       <div className="flex justify-center items-center h-screen bg-gray-100">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
