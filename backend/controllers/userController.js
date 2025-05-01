@@ -370,31 +370,43 @@ class UserController {
   };
   static getNewAccessToken = async (req, res) => {
     try {
-      const {
-        newAccessToken,
-        newRefreshToken,
-        newAccessTokenExp,
-        newRefreshTokenExp,
-      } = await refreshAccessToken(req, res);
-      setTokensCookies(
-        res,
-        newAccessToken,
-        newRefreshToken,
-        newAccessTokenExp,
-        newRefreshTokenExp
-      );
-      res.status(200).send({
-        status: "success",
-        message: "New tokens generated",
-        access_token: newAccessToken,
-        refresh_token: newRefreshToken,
-        access_token_exp: newAccessTokenExp,
+      const user = req.user; // From verifyRefresh middleware
+      console.log('Generating new token for user:', user._id);
+      const tokens = await generateTokens(user);
+      
+      console.log('Generated tokens:', {
+        accessToken: tokens.accessToken.substring(0, 20) + '...',
+        refreshToken: tokens.refreshToken.substring(0, 20) + '...'
+      });
+      
+      // Set tokens in cookies
+      res.cookie('accessToken', tokens.accessToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'none',
+        maxAge: 60 * 60 * 1000, // 1 hour
+      });
+      
+      res.cookie('refreshToken', tokens.refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'none',
+        maxAge: 5 * 24 * 60 * 60 * 1000, // 5 days
+      });
+      
+      res.json({
+        status: 'success',
+        accessToken: tokens.accessToken,
       });
     } catch (error) {
-      console.error("Error in getNewAccessToken:", error.stack);
+      console.error('Get New Access Token Error:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
       res.status(500).json({
-        status: "failed",
-        message: "Unable to generate new token, please try again later",
+        status: 'failed',
+        message: 'Unable to generate new token, please try again later',
       });
     }
   };
@@ -432,6 +444,7 @@ class UserController {
       });
     }
   };
+  
   static sendUserPasswordResetEmail = async (req, res) => {
     try {
       const { email } = req.body;
