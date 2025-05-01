@@ -5,28 +5,42 @@ export async function GET(request) {
     const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
     if (!API_BASE_URL) {
       return NextResponse.json(
-        { message: "Server configuration error" },
+        { success: false, message: "Server configuration error" },
         { status: 500 }
       );
     }
 
-    const cookieHeader = request.headers.get("cookie") || "";
+    // Extract cookies from the incoming request
+    const cookies = request.cookies.getAll().reduce((acc, cookie) => {
+      acc[cookie.name] = cookie.value;
+      return acc;
+    }, {});
 
-    const response = await fetch(`${API_BASE_URL}/api/gisRegistration/me`, {
+    // Forward necessary cookies to the backend
+    const cookieString = Object.entries(cookies)
+      .map(([name, value]) => `${name}=${value}`)
+      .join('; ');
+
+    const response = await fetch(`${API_BASE_URL}/api/gis-registration/me`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
-        Cookie: cookieHeader,
+        Cookie: cookieString,
       },
       credentials: "include",
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+      const errorData = await response.json().catch(() => ({
+        success: false,
+        message: "Failed to parse error response"
+      }));
+      
       return NextResponse.json(
         {
+          success: false,
           message: "Backend request failed",
-          details: errorData,
+          ...errorData,
         },
         { status: response.status }
       );
@@ -34,16 +48,17 @@ export async function GET(request) {
 
     const data = await response.json();
 
-    const setCookies = response.headers.raw()["set-cookie"];
+    // Forward set-cookie headers from backend to client
     const headers = new Headers();
-    if (setCookies) {
-      setCookies.forEach((cookie) =>
-        headers.append("Set-Cookie", cookie)
-      );
+    const setCookies = response.headers.getSetCookie();
+    if (setCookies && setCookies.length > 0) {
+      setCookies.forEach(cookie => {
+        headers.append('Set-Cookie', cookie);
+      });
     }
 
     return new NextResponse(JSON.stringify(data), {
-      status: response.status,
+      status: 200,
       headers,
     });
 
@@ -51,8 +66,12 @@ export async function GET(request) {
     console.error("GIS Registration Error:", error);
     return NextResponse.json(
       {
+        success: false,
         message: "Internal Server Error",
-        error: process.env.NODE_ENV === "development" ? error.message : undefined,
+        ...(process.env.NODE_ENV === "development" && { 
+          error: error.message,
+          stack: error.stack 
+        }),
       },
       { status: 500 }
     );

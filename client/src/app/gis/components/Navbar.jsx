@@ -25,26 +25,31 @@ const Navbar = () => {
     try {
       setLoading(true);
       setError(null);
-
-      // Check for existing access token
+  
+      // First attempt with current access token
       let accessToken = cookies.get("accessToken");
-      
-      // First attempt to fetch user data
       let response = await axios.get(`${API_BASE_URL}/api/user/me`, {
         withCredentials: true,
-        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
+        headers: accessToken ? { 
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        } : {}
       }).catch(err => err.response || err);
-
-      // Handle 401 Unauthorized (token expired)
+  
+      // If 401, attempt token refresh
       if (response?.status === 401) {
         try {
-          // Attempt to refresh token
           const refreshResponse = await axios.post(
-            `${API_BASE_URL}/api/auth/refresh`,
+            `${API_BASE_URL}/api/user/refresh-token`,
             {},
-            { withCredentials: true }
+            { 
+              withCredentials: true,
+              headers: {
+                'Content-Type': 'application/json'
+              }
+            }
           );
-
+  
           if (refreshResponse.data?.accessToken) {
             // Store new tokens
             cookies.set("accessToken", refreshResponse.data.accessToken, {
@@ -53,12 +58,13 @@ const Navbar = () => {
               secure: true,
               maxAge: 3600
             });
-
+  
             // Retry with new token
             response = await axios.get(`${API_BASE_URL}/api/user/me`, {
               withCredentials: true,
               headers: { 
-                Authorization: `Bearer ${refreshResponse.data.accessToken}` 
+                Authorization: `Bearer ${refreshResponse.data.accessToken}`,
+                'Content-Type': 'application/json'
               }
             });
           }
@@ -67,11 +73,11 @@ const Navbar = () => {
           throw new Error("Session expired. Please login again.");
         }
       }
-
+  
       // Handle successful response
       if (response?.data?.user) {
         setUser({
-          id: response.data.user.id,
+          id: response.data.user._id,
           name: response.data.user.name,
           email: response.data.user.email,
           isGISRegistered: response.data.user.isGISRegistered || false,

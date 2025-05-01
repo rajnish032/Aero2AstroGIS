@@ -27,29 +27,7 @@ export const protect = async (req, res, next) => {
     }
 
     if (!token) {
-      // Check for refresh token if access token is missing
-      if (req.cookies?.refreshToken) {
-        const refreshResponse = await axios.post(`${process.env.API_BASE_URL}/api/auth/refresh`, 
-          {}, 
-          { withCredentials: true }
-        );
-        
-        if (refreshResponse.data.accessToken) {
-          token = refreshResponse.data.accessToken;
-          // Set new tokens in cookies
-          setTokensCookies(
-            res,
-            refreshResponse.data.accessToken,
-            refreshResponse.data.refreshToken,
-            refreshResponse.data.accessTokenExp,
-            refreshResponse.data.refreshTokenExp
-          );
-        }
-      }
-      
-      if (!token) {
-        throw createError(401, "Not authorized, no token provided");
-      }
+      throw createError(401, "Not authorized, no token provided");
     }
 
     const decoded = verifyJWT(token, process.env.JWT_ACCESS_TOKEN_SECRET_KEY);
@@ -65,13 +43,28 @@ export const protect = async (req, res, next) => {
     // Handle token expiration specifically
     if (error.name === 'TokenExpiredError' && req.cookies?.refreshToken) {
       try {
-        const refreshResponse = await axios.post(`${process.env.API_BASE_URL}/api/auth/refresh`, 
+        const refreshResponse = await axios.post(
+          `${process.env.API_BASE_URL}/api/user/refresh-token`, 
           {}, 
-          { withCredentials: true }
+          { 
+            withCredentials: true,
+            headers: {
+              Cookie: `refreshToken=${req.cookies.refreshToken}`
+            }
+          }
         );
         
-        if (refreshResponse.data.accessToken) {
-          // Retry the request with new token
+        if (refreshResponse.data?.accessToken) {
+          // Set new tokens in cookies
+          setTokensCookies(
+            res,
+            refreshResponse.data.accessToken,
+            refreshResponse.data.refreshToken,
+            refreshResponse.data.accessTokenExp,
+            refreshResponse.data.refreshTokenExp
+          );
+          
+          // Retry the original request with new token
           req.headers.authorization = `Bearer ${refreshResponse.data.accessToken}`;
           return protect(req, res, next);
         }
@@ -89,7 +82,7 @@ export const protect = async (req, res, next) => {
       response.error = error.stack;
     }
     
-    res.status(error.status || 500).json(response);
+    res.status(error.status || 401).json(response);
   }
 };
 
