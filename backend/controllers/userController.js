@@ -56,7 +56,10 @@ class UserController {
         !city ||
         !state
       ) {
-        return res.status(400).json({ message: "All fields are required" });
+        return res.status(400).json({
+          success: false,
+          message: "All fields are required",
+        });
       }
 
       console.log(
@@ -70,6 +73,7 @@ class UserController {
       });
       if (existingUserByPhone) {
         return res.status(409).json({
+          success: false,
           message: "Phone number is already registered",
         });
       }
@@ -93,6 +97,7 @@ class UserController {
       console.log("Phone OTP sent, orderId:", orderId);
 
       res.status(201).json({
+        success: true,
         message: "Phone OTP sent. Please verify your phone.",
         user: { id: newUser._id, phoneNumber: newUser.phoneNumber },
         orderId,
@@ -100,6 +105,7 @@ class UserController {
     } catch (error) {
       console.error("Error in userRegistration:", error.message, error.stack);
       res.status(500).json({
+        success: false,
         message: "Unable to register, please try again later",
       });
     }
@@ -110,7 +116,10 @@ class UserController {
       const { phoneNumber, countryCode, otp, orderId } = req.body;
 
       if (!phoneNumber || !countryCode || !otp || !orderId) {
-        return res.status(400).json({ message: "All fields are required" });
+        return res.status(400).json({
+          success: false,
+          message: "All fields are required",
+        });
       }
 
       const fullPhoneNumber = `${countryCode}${phoneNumber}`;
@@ -120,11 +129,17 @@ class UserController {
       });
 
       if (!existingUser) {
-        return res.status(404).json({ message: "Phone number doesn't exist" });
+        return res.status(404).json({
+          success: false,
+          message: "Phone number doesn't exist",
+        });
       }
 
       if (existingUser.is_phone_verified) {
-        return res.status(400).json({ message: "Phone is already verified" });
+        return res.status(400).json({
+          success: false,
+          message: "Phone is already verified",
+        });
       }
 
       const phoneVerification = await PhoneVerificationModel.findOne({
@@ -133,38 +148,37 @@ class UserController {
       });
 
       if (!phoneVerification) {
-        const newOrderId = await this.sendPhoneVerificationOTP(
-          req,
-          existingUser
-        );
+        const newOrderId = await this.sendPhoneVerificationOTP(req, existingUser);
         return res.status(400).json({
+          success: false,
           message: "Invalid or expired orderId, new OTP sent to your phone",
           orderId: newOrderId,
         });
       }
 
-      const isVerified = await otplessClient.verifyOTP(
-        fullPhoneNumber,
-        otp,
-        orderId
-      );
+      const isVerified = await otplessClient.verifyOTP(fullPhoneNumber, otp, orderId);
       if (isVerified) {
         existingUser.is_phone_verified = true;
         await existingUser.save();
 
         await PhoneVerificationModel.deleteMany({ userId: existingUser._id });
 
-        const { accessToken } = await generateTokens(existingUser); // Temporary token for Step 1
+        const { accessToken, refreshToken, accessTokenExp, refreshTokenExp } =
+          await generateTokens(existingUser);
+        console.log("verifyPhone - Setting cookies:", { accessToken, refreshToken });
+        setTokensCookies(res, accessToken, refreshToken, accessTokenExp, refreshTokenExp);
+
         res.status(200).json({
+          success: true,
           message: "Phone verified successfully. Proceed to email verification.",
-          phoneAuth: accessToken,
+          accessToken,
+          refreshToken,
+          accessTokenExp,
         });
       } else {
-        const newOrderId = await this.sendPhoneVerificationOTP(
-          req,
-          existingUser
-        );
+        const newOrderId = await this.sendPhoneVerificationOTP(req, existingUser);
         return res.status(400).json({
+          success: false,
           message: "Invalid OTP, new OTP sent to your phone",
           orderId: newOrderId,
         });
@@ -172,6 +186,7 @@ class UserController {
     } catch (error) {
       console.error("Error in verifyPhone:", error.message, error.stack);
       res.status(500).json({
+        success: false,
         message: `Unable to verify phone: ${error.message}`,
       });
     }
@@ -182,7 +197,10 @@ class UserController {
       const { email, password, phoneNumber, countryCode } = req.body;
 
       if (!email || !password || !phoneNumber || !countryCode) {
-        return res.status(400).json({ message: "All fields are required" });
+        return res.status(400).json({
+          success: false,
+          message: "All fields are required",
+        });
       }
 
       const existingUser = await UserModel.findOne({
@@ -190,7 +208,10 @@ class UserController {
         countryCode,
       });
       if (!existingUser || !existingUser.is_phone_verified) {
-        return res.status(400).json({ message: "Phone number not verified" });
+        return res.status(400).json({
+          success: false,
+          message: "Phone number not verified",
+        });
       }
 
       const emailAlreadyRegistered = await UserModel.findOne({
@@ -199,6 +220,7 @@ class UserController {
       });
       if (emailAlreadyRegistered) {
         return res.status(409).json({
+          success: false,
           message: "Email is already registered",
         });
       }
@@ -213,12 +235,14 @@ class UserController {
       await sendEmailVerificationOTP(req, existingUser);
 
       res.status(200).json({
+        success: true,
         message: "Email OTP sent. Please verify your email.",
         user: { id: existingUser._id, email: existingUser.email },
       });
     } catch (error) {
       console.error("Error in sendEmailOtp:", error.message, error.stack);
       res.status(500).json({
+        success: false,
         message: "Unable to send email OTP, please try again later",
       });
     }
@@ -228,22 +252,25 @@ class UserController {
     try {
       const { email, otp } = req.body;
       if (!email || !otp) {
-        return res
-          .status(400)
-          .json({ status: "failed", message: "All fields are required" });
+        return res.status(400).json({
+          success: false,
+          message: "All fields are required",
+        });
       }
 
       const existingUser = await UserModel.findOne({ email });
       if (!existingUser) {
-        return res
-          .status(404)
-          .json({ status: "failed", message: "Email doesn't exist" });
+        return res.status(404).json({
+          success: false,
+          message: "Email doesn't exist",
+        });
       }
 
       if (existingUser.is_verified) {
-        return res
-          .status(400)
-          .json({ status: "failed", message: "Email is already verified" });
+        return res.status(400).json({
+          success: false,
+          message: "Email is already verified",
+        });
       }
 
       const emailVerification = await EmailVerificationModel.findOne({
@@ -253,7 +280,7 @@ class UserController {
       if (!emailVerification) {
         await sendEmailVerificationOTP(req, existingUser);
         return res.status(400).json({
-          status: "failed",
+          success: false,
           message: "Invalid OTP, new OTP sent to your email",
         });
       }
@@ -265,7 +292,7 @@ class UserController {
       if (currentTime > expirationTime) {
         await sendEmailVerificationOTP(req, existingUser);
         return res.status(400).json({
-          status: "failed",
+          success: false,
           message: "OTP expired, new OTP sent to your email",
         });
       }
@@ -287,16 +314,16 @@ class UserController {
       );
 
       res.status(200).json({
-        status: "success",
+        success: true,
         message: "Email verified and registration completed successfully",
-        access_token: accessToken,
-        refresh_token: refreshToken,
-        access_token_exp: accessTokenExp,
+        accessToken,
+        refreshToken,
+        accessTokenExp,
       });
     } catch (error) {
       console.error("Error in verifyEmail:", error.message, error.stack);
       res.status(500).json({
-        status: "failed",
+        success: false,
         message: "Unable to verify email, please try again later",
       });
     }
@@ -307,28 +334,30 @@ class UserController {
       const { email, password } = req.body;
       if (!email || !password) {
         return res.status(400).json({
-          status: "failed",
+          success: false,
           message: "Email and password are required",
         });
       }
 
       const user = await UserModel.findOne({ email });
       if (!user) {
-        return res
-          .status(404)
-          .json({ status: "failed", message: "Invalid Email or Password" });
+        return res.status(404).json({
+          success: false,
+          message: "Invalid Email or Password",
+        });
       }
 
       if (!user.is_verified) {
-        return res
-          .status(401)
-          .json({ status: "failed", message: "Your email is not verified" });
+        return res.status(401).json({
+          success: false,
+          message: "Your email is not verified",
+        });
       }
 
       if (!user.is_phone_verified) {
         const orderId = await this.sendPhoneVerificationOTP(req, user);
         return res.status(401).json({
-          status: "failed",
+          success: false,
           message: "Your phone is not verified. OTP sent to your phone.",
           orderId,
         });
@@ -336,9 +365,10 @@ class UserController {
 
       const isMatch = await bcrypt.compare(password, user.password);
       if (!isMatch) {
-        return res
-          .status(401)
-          .json({ status: "failed", message: "Invalid email or password" });
+        return res.status(401).json({
+          success: false,
+          message: "Invalid email or password",
+        });
       }
 
       const { accessToken, refreshToken, accessTokenExp, refreshTokenExp } =
@@ -353,6 +383,8 @@ class UserController {
       );
 
       res.status(200).json({
+        success: true,
+        message: "Login successful",
         user: {
           id: user._id,
           email: user.email,
@@ -360,17 +392,14 @@ class UserController {
           roles: user.roles[0],
           isGISRegistered: user.isGISRegistered || false,
         },
-        status: "success",
-        message: "Login successful",
-        access_token: accessToken,
-        refresh_token: refreshToken,
-        access_token_exp: accessTokenExp,
-        is_auth: true,
+        accessToken,
+        refreshToken,
+        accessTokenExp,
       });
     } catch (error) {
       console.error("Error in userLogin:", error.message, error.stack);
       res.status(500).json({
-        status: "failed",
+        success: false,
         message: "Unable to login, please try again later",
       });
     }
@@ -387,16 +416,16 @@ class UserController {
       setTokensCookies(res, accessToken, refreshToken, accessTokenExp, refreshTokenExp);
 
       res.status(200).json({
-        status: "success",
+        success: true,
         message: "New tokens generated",
-        access_token: accessToken,
-        refresh_token: refreshToken,
-        access_token_exp: accessTokenExp,
+        accessToken,
+        refreshToken,
+        accessTokenExp,
       });
     } catch (error) {
       console.error("Error in getNewAccessToken:", error.message, error.stack);
       res.status(500).json({
-        status: "failed",
+        success: false,
         message: "Unable to generate new token, please try again later",
       });
     }
@@ -404,11 +433,40 @@ class UserController {
 
   static userProfile = async (req, res) => {
     try {
-      res.send({ user: req.user });
+      const user = await UserModel.findById(req.user._id).select("-password");
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
+      }
+
+      const { accessToken, refreshToken, accessTokenExp, refreshTokenExp } =
+        await generateTokens(user); // Generate new tokens to ensure freshness
+      console.log("userProfile - Setting cookies:", { accessToken, refreshToken });
+      setTokensCookies(res, accessToken, refreshToken, accessTokenExp, refreshTokenExp);
+
+      res.status(200).json({
+        success: true,
+        message: "User profile fetched successfully",
+        user: {
+          id: user._id,
+          email: user.email,
+          name: user.name,
+          phoneNumber: user.phoneNumber,
+          countryCode: user.countryCode,
+          roles: user.roles[0],
+          isGISRegistered: user.isGISRegistered || false,
+          status: user.status || "pending",
+        },
+        accessToken,
+        refreshToken,
+        accessTokenExp,
+      });
     } catch (error) {
       console.error("Error in userProfile:", error.message, error.stack);
       res.status(500).json({
-        status: "failed",
+        success: false,
         message: "Unable to fetch user profile",
       });
     }
@@ -419,13 +477,13 @@ class UserController {
       const { password, password_confirmation } = req.body;
       if (!password || !password_confirmation) {
         return res.status(400).json({
-          status: "failed",
+          success: false,
           message: "New Password and Confirm New Password are required",
         });
       }
       if (password !== password_confirmation) {
         return res.status(400).json({
-          status: "failed",
+          success: false,
           message: "New Password and Confirm New Password don't match",
         });
       }
@@ -434,13 +492,14 @@ class UserController {
       await UserModel.findByIdAndUpdate(req.user._id, {
         $set: { password: newHashPassword },
       });
-      res
-        .status(200)
-        .json({ status: "success", message: "Password changed successfully" });
+      res.status(200).json({
+        success: true,
+        message: "Password changed successfully",
+      });
     } catch (error) {
       console.error("Error in changeUserPassword:", error.message, error.stack);
       res.status(500).json({
-        status: "failed",
+        success: false,
         message: "Unable to change password, please try again later",
       });
     }
@@ -450,15 +509,17 @@ class UserController {
     try {
       const { email } = req.body;
       if (!email) {
-        return res
-          .status(400)
-          .json({ status: "failed", message: "Email field is required" });
+        return res.status(400).json({
+          success: false,
+          message: "Email field is required",
+        });
       }
       const user = await UserModel.findOne({ email });
       if (!user) {
-        return res
-          .status(404)
-          .json({ status: "failed", message: "Email doesn't exist" });
+        return res.status(404).json({
+          success: false,
+          message: "Email doesn't exist",
+        });
       }
       const secret = user._id + process.env.JWT_ACCESS_TOKEN_SECRET_KEY;
       const token = jwt.sign({ userID: user._id }, secret, {
@@ -472,13 +533,13 @@ class UserController {
         html: `<p>Hello ${user.name},</p><p>Please <a href="${resetLink}">click here</a> to reset your password.</p>`,
       });
       res.status(200).json({
-        status: "success",
+        success: true,
         message: "Password reset email sent. Please check your email.",
       });
     } catch (error) {
       console.error("Error in sendUserPasswordResetEmail:", error.message, error.stack);
       res.status(500).json({
-        status: "failed",
+        success: false,
         message: "Unable to send password reset email. Please try again later",
       });
     }
@@ -490,21 +551,22 @@ class UserController {
       const { id, token } = req.params;
       const user = await UserModel.findById(id);
       if (!user) {
-        return res
-          .status(404)
-          .json({ status: "failed", message: "User not found" });
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
       }
       const new_secret = user._id + process.env.JWT_ACCESS_TOKEN_SECRET_KEY;
       jwt.verify(token, new_secret);
       if (!password || !password_confirmation) {
         return res.status(400).json({
-          status: "failed",
+          success: false,
           message: "New Password and Confirm New Password are required",
         });
       }
       if (password !== password_confirmation) {
         return res.status(400).json({
-          status: "failed",
+          success: false,
           message: "New Password and Confirm New Password don't match",
         });
       }
@@ -513,19 +575,20 @@ class UserController {
       await UserModel.findByIdAndUpdate(user._id, {
         $set: { password: newHashPassword },
       });
-      res
-        .status(200)
-        .json({ status: "success", message: "Password reset successfully" });
+      res.status(200).json({
+        success: true,
+        message: "Password reset successfully",
+      });
     } catch (error) {
       console.error("Error in userPasswordReset:", error.message, error.stack);
       if (error.name === "TokenExpiredError") {
         return res.status(400).json({
-          status: "failed",
+          success: false,
           message: "Token expired. Please request a new password reset link.",
         });
       }
       return res.status(500).json({
-        status: "failed",
+        success: false,
         message: "Unable to reset password. Please try again later",
       });
     }
@@ -534,19 +597,25 @@ class UserController {
   static userLogout = async (req, res) => {
     try {
       const refreshToken = req.cookies.refreshToken;
-      console.log("userLogout - Clearing cookies, refreshToken:", refreshToken);
-      await UserRefreshTokenModel.findOneAndUpdate(
-        { token: refreshToken },
-        { $set: { blacklisted: true } }
-      );
+      console.log("userLogout - Clearing cookies, refreshToken:", refreshToken?.slice(0, 20) + "...");
+      if (refreshToken) {
+        await UserRefreshTokenModel.findOneAndUpdate(
+          { token: refreshToken },
+          { $set: { blacklisted: true } }
+        );
+      }
       res.clearCookie("accessToken");
       res.clearCookie("refreshToken");
       res.clearCookie("is_auth");
-      res.status(200).json({ status: "success", message: "Logout successful" });
+      res.clearCookie("phoneAuth");
+      res.status(200).json({
+        success: true,
+        message: "Logout successful",
+      });
     } catch (error) {
       console.error("Error in userLogout:", error.message, error.stack);
       res.status(500).json({
-        status: "failed",
+        success: false,
         message: "Unable to logout, please try again later",
       });
     }
@@ -557,19 +626,19 @@ class UserController {
       const user = await UserModel.findById(req.user._id);
       if (!user) {
         return res.status(404).json({
-          status: "failed",
+          success: false,
           message: "User not found",
         });
       }
       if (!user.isGISRegistered) {
         return res.status(400).json({
-          status: "failed",
+          success: false,
           message: "Please complete GIS registration first",
         });
       }
       if (user.isApplied) {
         return res.status(400).json({
-          status: "failed",
+          success: false,
           message: "You have already applied for approval",
         });
       }
@@ -579,7 +648,7 @@ class UserController {
       });
       if (!gisRegistration) {
         return res.status(400).json({
-          status: "failed",
+          success: false,
           message: "No completed GIS registration found",
         });
       }
@@ -595,13 +664,13 @@ class UserController {
         html: `<p>Hello ${user.name},</p><p>Your GIS membership application is under review.</p>`,
       });
       res.status(200).json({
-        status: "success",
+        success: true,
         message: "Application submitted for approval",
       });
     } catch (error) {
       console.error("Error in applyApproval:", error.message, error.stack);
       res.status(500).json({
-        status: "failed",
+        success: false,
         message: `Failed to apply for approval: ${error.message}`,
       });
     }
