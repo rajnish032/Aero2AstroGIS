@@ -1,11 +1,47 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 
+const baseQuery = fetchBaseQuery({
+  baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL + "/api/user/",
+  credentials: "include",
+  prepareHeaders: (headers, { getState }) => {
+    // You can add any custom headers here if needed
+    headers.set("Content-Type", "application/json");
+    return headers;
+  },
+});
+
+const baseQueryWithReauth = async (args, api, extraOptions) => {
+  let result = await baseQuery(args, api, extraOptions);
+
+  // If 401 Unauthorized, try to refresh token
+  if (result.error?.status === 401) {
+    console.log("Attempting token refresh...");
+    const refreshResult = await baseQuery(
+      {
+        url: "refresh-token",
+        method: "POST",
+      },
+      api,
+      extraOptions
+    );
+
+    if (refreshResult.data) {
+      // Retry the original query with new token
+      result = await baseQuery(args, api, extraOptions);
+    } else {
+      // Refresh failed - logout the user
+      await baseQuery({ url: "logout", method: "POST" }, api, extraOptions);
+      // You can dispatch a logout action here if needed
+    }
+  }
+
+  return result;
+};
+
 export const authApi = createApi({
   reducerPath: "authApi",
-  baseQuery: fetchBaseQuery({
-    baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL + "/api/user/",
-    credentials: "include",
-  }),
+  baseQuery: baseQueryWithReauth,
+  tagTypes: ["User"],
   endpoints: (builder) => ({
     createUser: builder.mutation({
       query: (user) => ({
@@ -13,6 +49,7 @@ export const authApi = createApi({
         method: "POST",
         body: user,
       }),
+      invalidatesTags: ["User"],
     }),
 
     verifyPhone: builder.mutation({
@@ -29,13 +66,14 @@ export const authApi = createApi({
         method: "POST",
         body: data,
       }),
+      invalidatesTags: ["User"],
     }),
 
     loginUser: builder.mutation({
-      query: (user) => ({
+      query: (credentials) => ({
         url: "login",
         method: "POST",
-        body: user,
+        body: credentials,
       }),
       transformResponse: (response) => ({
         ...response,
@@ -46,6 +84,7 @@ export const authApi = createApi({
             }
           : null,
       }),
+      invalidatesTags: ["User"],
     }),
 
     getUser: builder.query({
@@ -59,9 +98,11 @@ export const authApi = createApi({
           ? {
               ...response.user,
               isGISRegistered: response.user.isGISRegistered ?? false,
+              status: response.user.status || "pending",
             }
           : null,
       }),
+      providesTags: ["User"],
     }),
 
     logoutUser: builder.mutation({
@@ -69,13 +110,14 @@ export const authApi = createApi({
         url: "logout",
         method: "POST",
       }),
+      invalidatesTags: ["User"],
     }),
 
     resetPasswordLink: builder.mutation({
-      query: (data) => ({
+      query: (email) => ({
         url: "send-password-reset-email",
         method: "POST",
-        body: data,
+        body: { email },
       }),
     }),
 
@@ -94,6 +136,21 @@ export const authApi = createApi({
         body: data,
       }),
     }),
+
+    refreshToken: builder.mutation({
+      query: () => ({
+        url: "refresh-token",
+        method: "POST",
+      }),
+    }),
+
+    applyApproval: builder.mutation({
+      query: () => ({
+        url: "apply-approval",
+        method: "POST",
+      }),
+      invalidatesTags: ["User"],
+    }),
   }),
 });
 
@@ -107,4 +164,6 @@ export const {
   useResetPasswordLinkMutation,
   useResetPasswordMutation,
   useChangePasswordMutation,
+  useRefreshTokenMutation,
+  useApplyApprovalMutation,
 } = authApi;
