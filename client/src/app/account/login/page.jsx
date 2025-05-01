@@ -47,12 +47,12 @@ const Login = () => {
     onSubmit: async (values, { resetForm }) => {
       setLoading(true);
       setErrorMessage("");
-
+  
       try {
         const response = await loginUser(values, {
           credentials: 'include'
         }).unwrap();
-
+  
         if (response?.status === "success") {
           // Set cookies with consistent attributes
           cookies.set("accessToken", response.access_token, {
@@ -61,24 +61,24 @@ const Login = () => {
             sameSite: "none",
             secure: true,
           });
-
+  
           cookies.set("refreshToken", response.refresh_token, {
             path: "/",
-            maxAge: 86400, // 1 day
+            maxAge: 86400,
             sameSite: "none",
             secure: true,
-            httpOnly: false // Must be false for client-side access
+            httpOnly: false
           });
-
+  
           cookies.set("user", JSON.stringify(response.user || {}), {
             path: "/",
             maxAge: 3600,
             sameSite: "none",
             secure: true
           });
-
+  
           setShowSuccess(true);
-
+  
           setTimeout(() => {
             if (response.user.isGISRegistered) {
               router.push("/gis/dashboard");
@@ -86,7 +86,7 @@ const Login = () => {
               router.push("/gis/profile");
             }
           }, 1500);
-
+  
           resetForm();
         } else {
           setErrorMessage("Login failed. Please try again.");

@@ -13,25 +13,24 @@ const baseQuery = fetchBaseQuery({
 const baseQueryWithReauth = async (args, api, extraOptions) => {
   let result = await baseQuery(args, api, extraOptions);
 
-  // If 401 Unauthorized, try to refresh token
   if (result.error?.status === 401) {
     console.log("Attempting token refresh...");
     const refreshResult = await baseQuery(
       {
         url: "refresh-token",
         method: "POST",
+        credentials: "include", // Ensure credentials are included
       },
       api,
       extraOptions
     );
 
     if (refreshResult.data) {
-      // Retry the original query with new token
-      result = await baseQuery(args, api, extraOptions);
+      console.log("Refresh successful:", refreshResult.data); // Debug refresh result
+      result = await baseQuery(args, api, extraOptions); // Retry original request
     } else {
-      // Refresh failed - logout the user
-      await baseQuery({ url: "logout", method: "POST" }, api, extraOptions);
-      // You can dispatch a logout action here if needed
+      console.error("Refresh failed:", refreshResult.error); // Debug refresh failure
+      await baseQuery({ url: "logout", method: "POST", credentials: "include" }, api, extraOptions);
     }
   }
 

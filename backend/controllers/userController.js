@@ -368,36 +368,31 @@ class UserController {
       });
     }
   };
-  static getNewAccessToken = async (req, res) => {
-    try {
-      const {
-        newAccessToken,
-        newRefreshToken,
-        newAccessTokenExp,
-        newRefreshTokenExp,
-      } = await refreshAccessToken(req, res);
-      setTokensCookies(
-        res,
-        newAccessToken,
-        newRefreshToken,
-        newAccessTokenExp,
-        newRefreshTokenExp
-      );
-      res.status(200).send({
-        status: "success",
-        message: "New tokens generated",
-        access_token: newAccessToken,
-        refresh_token: newRefreshToken,
-        access_token_exp: newAccessTokenExp,
-      });
-    } catch (error) {
-      console.error("Error in getNewAccessToken:", error.stack);
-      res.status(500).json({
-        status: "failed",
-        message: "Unable to generate new token, please try again later",
-      });
-    }
-  };
+static getNewAccessToken = async (req, res) => {
+  try {
+    const user = req.user;
+    console.log("Refreshing token for user:", user._id); // Debug user
+
+    const { accessToken, refreshToken, accessTokenExp, refreshTokenExp } =
+      await generateTokens(user);
+
+    setTokensCookies(res, accessToken, refreshToken, accessTokenExp, refreshTokenExp);
+
+    res.status(200).json({
+      status: "success",
+      message: "New tokens generated",
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      access_token_exp: accessTokenExp,
+    });
+  } catch (error) {
+    console.error("Error in getNewAccessToken:", error.stack);
+    res.status(500).json({
+      status: "failed",
+      message: "Unable to generate new token, please try again later",
+    });
+  }
+};
   static userProfile = async (req, res) => {
     res.send({ user: req.user });
   };
