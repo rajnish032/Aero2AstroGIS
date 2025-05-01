@@ -1,40 +1,29 @@
-const setTokensCookies = (
-  res,
-  accessToken,
-  refreshToken,
-  accessTokenExp,
-  refreshTokenExp
-) => {
-  const accessTokenMaxAge = (accessTokenExp - Math.floor(Date.now() / 1000)) * 1000; // Convert to ms
-  const refreshTokenMaxAge = (refreshTokenExp - Math.floor(Date.now() / 1000)) * 1000;
+const setTokensCookies = (res, accessToken, refreshToken, newAccessTokenExp, newRefreshTokenExp) => {
+  const accessTokenMaxAge = (newAccessTokenExp - Math.floor(Date.now() / 1000)) * 1000;
+  const refreshTokenMaxAge = (newRefreshTokenExp - Math.floor(Date.now() / 1000)) * 1000;
+  
+  // Always use these settings for Render deployment
+  const cookieOptions = {
+    httpOnly: true,
+    secure: true,       // Always true for Render
+    sameSite: 'none',   // Required for cross-site
+    path: '/',
+  };
 
   res.cookie("accessToken", accessToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-    maxAge: accessTokenMaxAge,
+    ...cookieOptions,
+    maxAge: accessTokenMaxAge
   });
 
   res.cookie("refreshToken", refreshToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-    maxAge: refreshTokenMaxAge,
+    ...cookieOptions,
+    maxAge: refreshTokenMaxAge
   });
 
-  res.cookie("is_auth", true, {
-    httpOnly: false,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-    maxAge: accessTokenMaxAge,
-  });
-
-  console.log("setTokensCookies - Cookies set:", {
-    accessToken: accessToken.slice(0, 20) + "...",
-    refreshToken: refreshToken.slice(0, 20) + "...",
-    is_auth: true,
-    accessTokenMaxAge,
-    refreshTokenMaxAge,
+  res.cookie("is_auth", "true", {
+    ...cookieOptions,
+    httpOnly: false, // Needed for client-side access
+    maxAge: refreshTokenMaxAge
   });
 };
 

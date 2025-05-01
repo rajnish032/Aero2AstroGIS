@@ -1,8 +1,6 @@
 import jwt from "jsonwebtoken";
-import UserModel from "../models/User.js";
-import UserRefreshTokenModel from "../models/UserRefreshToken.js";
+import User from "../models/User.js";
 import createError from "http-errors";
-import accessTokenAutoRefresh from "../utils/accessTokenAutoRefresh.js";
 
 const verifyJWT = (token, secret) => {
   try {
@@ -12,122 +10,79 @@ const verifyJWT = (token, secret) => {
       TokenExpiredError: createError(401, "Token expired, please log in again"),
       JsonWebTokenError: createError(401, "Invalid token"),
     };
+    
     throw errorMap[error.name] || createError(401, "Token verification failed");
   }
 };
 
 export const protect = async (req, res, next) => {
   try {
-    console.log("Protect Middleware - Request headers:", {
-      authorization: req.headers.authorization,
-      cookie: req.headers.cookie,
-    });
-    console.log("Protect Middleware - Cookies:", req.cookies);
+    let token;
+    
+    // Check multiple token sources
+    if (req.headers.authorization?.startsWith("Bearer")) {
+      token = req.headers.authorization.split(" ")[1];
+    } else if (req.cookies?.accessToken) {
+      token = req.cookies.accessToken;
+    }
 
-    // Use accessTokenAutoRefresh to handle token refresh
-    await accessTokenAutoRefresh(req, res, async () => {
-      let token = req.headers.authorization?.split(" ")[1];
+    if (!token) {
+      throw createError(401, "Not authorized, no token provided");
+    }
 
-      // Fallback to accessToken cookie if Authorization header is missing
-      if (!token && req.cookies.accessToken) {
-        console.log("Protect Middleware - No Authorization header, using accessToken cookie");
-        token = req.cookies.accessToken;
-        req.headers.authorization = `Bearer ${token}`; // Set for consistency
-      }
+    const decoded = verifyJWT(token, process.env.JWT_ACCESS_TOKEN_SECRET_KEY);
+    const user = await User.findById(decoded._id).select("-password -refreshToken");
+    
+    if (!user) {
+      throw createError(401, "User not found, authorization denied");
+    }
 
-      if (!token) {
-        console.error("Protect Middleware - No token provided in Authorization header or cookies");
-        throw createError(401, "Not authorized, no token provided");
-      }
-
-      console.log("Protect Middleware - Verifying token:", token.slice(0, 20) + "...");
-      const decoded = verifyJWT(token, process.env.JWT_ACCESS_TOKEN_SECRET_KEY);
-      console.log("Protect Middleware - Decoded token:", {
-        _id: decoded._id,
-        roles: decoded.roles,
-        exp: decoded.exp,
-      });
-
+    req.user = user;
+    next();
+  } catch (error) {
+    // Handle token expiration specifically
+    if (error.name === 'TokenExpiredError' && req.cookies?.refreshToken) {
       try {
-        const user = await UserModel.findById(decoded._id).select("-password");
-        if (!user) {
-          console.error("Protect Middleware - User not found for ID:", decoded._id);
-          throw createError(401, "User not found, authorization denied");
+        const refreshResponse = await axios.post(
+          `${process.env.API_BASE_URL}/api/user/refresh-token`, 
+          {}, 
+          { 
+            withCredentials: true,
+            headers: {
+              Cookie: `refreshToken=${req.cookies.refreshToken}`
+            }
+          }
+        );
+        
+        if (refreshResponse.data?.accessToken) {
+          // Set new tokens in cookies
+          setTokensCookies(
+            res,
+            refreshResponse.data.accessToken,
+            refreshResponse.data.refreshToken,
+            refreshResponse.data.accessTokenExp,
+            refreshResponse.data.refreshTokenExp
+          );
+          
+          // Retry the original request with new token
+          req.headers.authorization = `Bearer ${refreshResponse.data.accessToken}`;
+          return protect(req, res, next);
         }
-        console.log("Protect Middleware - User found:", {
-          _id: user._id,
-          email: user.email,
-          roles: user.roles,
-        });
-        req.user = user;
-        next();
-      } catch (dbError) {
-        console.error("Protect Middleware - Database error:", dbError.message, dbError.stack);
-        throw createError(500, "Database error during user lookup");
+      } catch (refreshError) {
+        console.error('Refresh token failed:', refreshError);
       }
-    });
-  } catch (error) {
-    console.error("Protect Middleware - Error:", error.message, error.stack);
-    res.status(error.status || 401).json({
+    }
+    
+    const response = {
       success: false,
       message: error.message,
-      ...(process.env.NODE_ENV === "development" && { stack: error.stack }),
-    });
-  }
-};
-
-export const verifyRefresh = async (req, res, next) => {
-  try {
-    const refreshToken = req.cookies?.refreshToken;
-    console.log("VerifyRefresh Middleware - Refresh token:", refreshToken?.slice(0, 20) + "...");
-
-    if (!refreshToken) {
-      console.error("VerifyRefresh Middleware - No refresh token provided in cookies");
-      throw createError(401, "No refresh token provided");
+    };
+    
+    if (process.env.NODE_ENV === "development") {
+      response.error = error.stack;
     }
-
-    const decoded = verifyJWT(refreshToken, process.env.JWT_REFRESH_TOKEN_SECRET_KEY);
-    console.log("VerifyRefresh Middleware - Decoded refresh token:", {
-      _id: decoded._id,
-      roles: decoded.roles,
-      exp: decoded.exp,
-    });
-
-    try {
-      const tokenRecord = await UserRefreshTokenModel.findOne({
-        userId: decoded._id,
-        token: refreshToken,
-        blacklisted: false,
-      });
-      if (!tokenRecord) {
-        console.error("VerifyRefresh Middleware - Invalid or blacklisted refresh token for user:", decoded._id);
-        throw createError(403, "Invalid or blacklisted refresh token");
-      }
-
-      const user = await UserModel.findById(decoded._id).select("-password");
-      if (!user) {
-        console.error("VerifyRefresh Middleware - User not found for ID:", decoded._id);
-        throw createError(403, "User not found for this refresh token");
-      }
-
-      console.log("VerifyRefresh Middleware - User found:", {
-        _id: user._id,
-        email: user.email,
-        roles: user.roles,
-      });
-      req.user = user;
-      next();
-    } catch (dbError) {
-      console.error("VerifyRefresh Middleware - Database error:", dbError.message, dbError.stack);
-      throw createError(500, "Database error during user lookup");
-    }
-  } catch (error) {
-    console.error("VerifyRefresh Middleware - Error:", error.message, error.stack);
-    res.status(error.status || 500).json({
-      success: false,
-      message: error.message,
-      ...(process.env.NODE_ENV === "development" && { stack: error.stack }),
-    });
+    
+    res.status(error.status || 401).json(response);
   }
 };
 
@@ -135,32 +90,59 @@ export const authorize = (...roles) => {
   return (req, res, next) => {
     try {
       if (!req.user) {
-        console.error("Authorize Middleware - No user in request");
         throw createError(401, "Authentication required");
       }
-
+      
       const userRoles = req.user.roles || ["user"];
-      console.log("Authorize Middleware - Checking roles:", {
-        userRoles,
-        requiredRoles: roles,
-      });
-
-      if (!roles.some((role) => userRoles.includes(role))) {
-        console.error("Authorize Middleware - Unauthorized role:", userRoles);
-        throw createError(
-          403,
+      if (!roles.some(role => userRoles.includes(role))) {
+        throw createError(403, 
           `User roles ${userRoles.join(", ")} are not authorized to access this route`
         );
       }
-      console.log("Authorize Middleware - Role authorized, proceeding");
       next();
     } catch (error) {
-      console.error("Authorize Middleware - Error:", error.message, error.stack);
       res.status(error.status || 500).json({
         success: false,
         message: error.message,
-        ...(process.env.NODE_ENV === "development" && { stack: error.stack }),
+        ...(process.env.NODE_ENV === "development" && { error: error.stack }),
       });
     }
   };
+};
+
+export const verifyRefresh = async (req, res, next) => {
+  try {
+    const { refreshToken } = req.cookies;
+    
+    if (!refreshToken) {
+      throw createError(401, "No refresh token provided");
+    }
+
+    const decoded = verifyJWT(refreshToken, process.env.JWT_REFRESH_TOKEN_SECRET_KEY);
+    const user = await User.findById(decoded._id);
+
+    if (!user) {
+      throw createError(403, "User not found for this refresh token");
+    }
+
+    // Optional refresh token validation if stored in user document
+    if (user.refreshToken && user.refreshToken !== refreshToken) {
+      throw createError(403, "Invalid refresh token");
+    }
+
+    req.user = user;
+    next();
+  } catch (error) {
+    const response = {
+      success: false,
+      message: error.message,
+    };
+    
+    if (process.env.NODE_ENV === "development") {
+      response.error = error.stack;
+      console.error("Refresh Token Error:", error.message);
+    }
+    
+    res.status(error.status || 500).json(response);
+  }
 };
