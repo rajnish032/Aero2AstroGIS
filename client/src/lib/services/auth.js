@@ -4,8 +4,12 @@ const baseQuery = fetchBaseQuery({
   baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL + "/api/user/",
   credentials: "include",
   prepareHeaders: (headers, { getState }) => {
-    // You can add any custom headers here if needed
     headers.set("Content-Type", "application/json");
+    // Add Authorization header from localStorage
+    const accessToken = localStorage.getItem("accessToken");
+    if (accessToken) {
+      headers.set("Authorization", `Bearer ${accessToken}`);
+    }
     return headers;
   },
 });
@@ -15,22 +19,43 @@ const baseQueryWithReauth = async (args, api, extraOptions) => {
 
   if (result.error?.status === 401) {
     console.log("Attempting token refresh...");
+
+    // Trigger backend's accessTokenAutoRefresh by calling /me
     const refreshResult = await baseQuery(
       {
-        url: "refresh-token",
-        method: "POST",
-        credentials: "include", // Ensure credentials are included
+        url: "me",
+        method: "GET",
+        credentials: "include",
       },
       api,
       extraOptions
     );
 
-    if (refreshResult.data) {
-      console.log("Refresh successful:", refreshResult.data); // Debug refresh result
-      result = await baseQuery(args, api, extraOptions); // Retry original request
+    if (refreshResult.data && refreshResult.data.success) {
+      console.log("Refresh successful:", refreshResult.data);
+      // Store new accessToken from response (assuming backend sets it in cookies)
+      const newAccessToken = localStorage.getItem("accessToken"); // Updated by setTokensCookies
+      if (newAccessToken) {
+        // Retry original request
+        result = await baseQuery(args, api, extraOptions);
+      } else {
+        console.error("Refresh succeeded but no new accessToken found");
+      }
     } else {
-      console.error("Refresh failed:", refreshResult.error); // Debug refresh failure
-      await baseQuery({ url: "logout", method: "POST", credentials: "include" }, api, extraOptions);
+      console.error("Refresh failed:", refreshResult.error || "No data returned");
+      // Clear tokens and log out
+      localStorage.removeItem("accessToken");
+      await baseQuery(
+        { url: "logout", method: "POST", credentials: "include" },
+        api,
+        extraOptions
+      );
+      // Dispatch action to reset auth state (optional, requires auth slice)
+      api.dispatch({ type: "auth/logout" });
+      // Redirect to login (requires Next.js router in component)
+      if (typeof window !== "undefined") {
+        window.location.href = "/login";
+      }
     }
   }
 
@@ -49,6 +74,12 @@ export const authApi = createApi({
         body: user,
       }),
       invalidatesTags: ["User"],
+      transformResponse: (response) => {
+        if (response.success && response.accessToken) {
+          localStorage.setItem("accessToken", response.accessToken);
+        }
+        return response;
+      },
     }),
 
     verifyPhone: builder.mutation({
@@ -57,6 +88,12 @@ export const authApi = createApi({
         method: "POST",
         body: data,
       }),
+      transformResponse: (response) => {
+        if (response.success && response.accessToken) {
+          localStorage.setItem("accessToken", response.accessToken);
+        }
+        return response;
+      },
     }),
 
     verifyEmail: builder.mutation({
@@ -66,6 +103,12 @@ export const authApi = createApi({
         body: data,
       }),
       invalidatesTags: ["User"],
+      transformResponse: (response) => {
+        if (response.success && response.accessToken) {
+          localStorage.setItem("accessToken", response.accessToken);
+        }
+        return response;
+      },
     }),
 
     loginUser: builder.mutation({
@@ -74,15 +117,20 @@ export const authApi = createApi({
         method: "POST",
         body: credentials,
       }),
-      transformResponse: (response) => ({
-        ...response,
-        user: response.user
-          ? {
-              ...response.user,
-              isGISRegistered: response.user.isGISRegistered ?? false,
-            }
-          : null,
-      }),
+      transformResponse: (response) => {
+        if (response.success && response.accessToken) {
+          localStorage.setItem("accessToken", response.accessToken);
+        }
+        return {
+          ...response,
+          user: response.user
+            ? {
+                ...response.user,
+                isGISRegistered: response.user.isGISRegistered ?? false,
+              }
+            : null,
+        };
+      },
       invalidatesTags: ["User"],
     }),
 
@@ -91,16 +139,21 @@ export const authApi = createApi({
         url: "me",
         method: "GET",
       }),
-      transformResponse: (response) => ({
-        ...response,
-        user: response.user
-          ? {
-              ...response.user,
-              isGISRegistered: response.user.isGISRegistered ?? false,
-              status: response.user.status || "pending",
-            }
-          : null,
-      }),
+      transformResponse: (response) => {
+        if (response.success && response.accessToken) {
+          localStorage.setItem("accessToken", response.accessToken);
+        }
+        return {
+          ...response,
+          user: response.user
+            ? {
+                ...response.user,
+                isGISRegistered: response.user.isGISRegistered ?? false,
+                status: response.user.status || "pending",
+              }
+            : null,
+        };
+      },
       providesTags: ["User"],
     }),
 
@@ -110,6 +163,10 @@ export const authApi = createApi({
         method: "POST",
       }),
       invalidatesTags: ["User"],
+      transformResponse: (response) => {
+        localStorage.removeItem("accessToken");
+        return response;
+      },
     }),
 
     resetPasswordLink: builder.mutation({
@@ -138,9 +195,15 @@ export const authApi = createApi({
 
     refreshToken: builder.mutation({
       query: () => ({
-        url: "refresh-token",
-        method: "POST",
+        url: "me", // Use /me to trigger accessTokenAutoRefresh
+        method: "GET",
       }),
+      transformResponse: (response) => {
+        if (response.success && response.accessToken) {
+          localStorage.setItem("accessToken", response.accessToken);
+        }
+        return response;
+      },
     }),
 
     applyApproval: builder.mutation({

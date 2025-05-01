@@ -5,7 +5,6 @@ import EmailVerificationModel from "../models/EmailVerification.js";
 import PhoneVerificationModel from "../models/PhoneVerificationModel.js";
 import generateTokens from "../utils/generateTokens.js";
 import setTokensCookies from "../utils/setTokensCookies.js";
-import refreshAccessToken from "../utils/refreshAccessToken.js";
 import UserRefreshTokenModel from "../models/UserRefreshToken.js";
 import jwt from "jsonwebtoken";
 import transporter from "../config/emailConfig.js";
@@ -30,10 +29,11 @@ class UserController {
 
       return orderId;
     } catch (error) {
-      console.error("Error in sendPhoneVerificationOTP:", error);
+      console.error("Error in sendPhoneVerificationOTP:", error.message, error.stack);
       throw new Error(`Failed to send phone OTP: ${error.message}`);
     }
   };
+
   static userRegistration = async (req, res) => {
     try {
       console.log("Request received at /api/user/register:", req.body);
@@ -98,12 +98,13 @@ class UserController {
         orderId,
       });
     } catch (error) {
-      console.error("Error in userRegistration:", error.stack);
+      console.error("Error in userRegistration:", error.message, error.stack);
       res.status(500).json({
         message: "Unable to register, please try again later",
       });
     }
   };
+
   static verifyPhone = async (req, res) => {
     try {
       const { phoneNumber, countryCode, otp, orderId } = req.body;
@@ -141,6 +142,7 @@ class UserController {
           orderId: newOrderId,
         });
       }
+
       const isVerified = await otplessClient.verifyOTP(
         fullPhoneNumber,
         otp,
@@ -154,8 +156,7 @@ class UserController {
 
         const { accessToken } = await generateTokens(existingUser); // Temporary token for Step 1
         res.status(200).json({
-          message:
-            "Phone verified successfully. Proceed to email verification.",
+          message: "Phone verified successfully. Proceed to email verification.",
           phoneAuth: accessToken,
         });
       } else {
@@ -169,7 +170,7 @@ class UserController {
         });
       }
     } catch (error) {
-      console.error("Error in verifyPhone:", error.stack);
+      console.error("Error in verifyPhone:", error.message, error.stack);
       res.status(500).json({
         message: `Unable to verify phone: ${error.message}`,
       });
@@ -191,6 +192,7 @@ class UserController {
       if (!existingUser || !existingUser.is_phone_verified) {
         return res.status(400).json({ message: "Phone number not verified" });
       }
+
       const emailAlreadyRegistered = await UserModel.findOne({
         email,
         _id: { $ne: existingUser._id },
@@ -200,6 +202,7 @@ class UserController {
           message: "Email is already registered",
         });
       }
+
       const salt = await bcrypt.genSalt(Number(process.env.SALT));
       const hashedPassword = await bcrypt.hash(password, salt);
 
@@ -214,12 +217,13 @@ class UserController {
         user: { id: existingUser._id, email: existingUser.email },
       });
     } catch (error) {
-      console.error("Error in sendEmailOtp:", error.stack);
+      console.error("Error in sendEmailOtp:", error.message, error.stack);
       res.status(500).json({
         message: "Unable to send email OTP, please try again later",
       });
     }
   };
+
   static verifyEmail = async (req, res) => {
     try {
       const { email, otp } = req.body;
@@ -273,6 +277,7 @@ class UserController {
 
       const { accessToken, refreshToken, accessTokenExp, refreshTokenExp } =
         await generateTokens(existingUser);
+      console.log("verifyEmail - Setting cookies:", { accessToken, refreshToken });
       setTokensCookies(
         res,
         accessToken,
@@ -289,13 +294,14 @@ class UserController {
         access_token_exp: accessTokenExp,
       });
     } catch (error) {
-      console.error("Error in verifyEmail:", error.stack);
+      console.error("Error in verifyEmail:", error.message, error.stack);
       res.status(500).json({
         status: "failed",
         message: "Unable to verify email, please try again later",
       });
     }
   };
+
   static userLogin = async (req, res) => {
     try {
       const { email, password } = req.body;
@@ -337,6 +343,7 @@ class UserController {
 
       const { accessToken, refreshToken, accessTokenExp, refreshTokenExp } =
         await generateTokens(user);
+      console.log("userLogin - Setting cookies:", { accessToken, refreshToken });
       setTokensCookies(
         res,
         accessToken,
@@ -361,41 +368,52 @@ class UserController {
         is_auth: true,
       });
     } catch (error) {
-      console.error("Error in userLogin:", error.stack);
+      console.error("Error in userLogin:", error.message, error.stack);
       res.status(500).json({
         status: "failed",
         message: "Unable to login, please try again later",
       });
     }
   };
-static getNewAccessToken = async (req, res) => {
-  try {
-    const user = req.user;
-    console.log("Refreshing token for user:", user._id); // Debug user
 
-    const { accessToken, refreshToken, accessTokenExp, refreshTokenExp } =
-      await generateTokens(user);
+  static getNewAccessToken = async (req, res) => {
+    try {
+      const user = req.user;
+      console.log("Refreshing token for user:", user._id);
 
-    setTokensCookies(res, accessToken, refreshToken, accessTokenExp, refreshTokenExp);
+      const { accessToken, refreshToken, accessTokenExp, refreshTokenExp } =
+        await generateTokens(user);
+      console.log("getNewAccessToken - Setting cookies:", { accessToken, refreshToken });
+      setTokensCookies(res, accessToken, refreshToken, accessTokenExp, refreshTokenExp);
 
-    res.status(200).json({
-      status: "success",
-      message: "New tokens generated",
-      access_token: accessToken,
-      refresh_token: refreshToken,
-      access_token_exp: accessTokenExp,
-    });
-  } catch (error) {
-    console.error("Error in getNewAccessToken:", error.stack);
-    res.status(500).json({
-      status: "failed",
-      message: "Unable to generate new token, please try again later",
-    });
-  }
-};
-  static userProfile = async (req, res) => {
-    res.send({ user: req.user });
+      res.status(200).json({
+        status: "success",
+        message: "New tokens generated",
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        access_token_exp: accessTokenExp,
+      });
+    } catch (error) {
+      console.error("Error in getNewAccessToken:", error.message, error.stack);
+      res.status(500).json({
+        status: "failed",
+        message: "Unable to generate new token, please try again later",
+      });
+    }
   };
+
+  static userProfile = async (req, res) => {
+    try {
+      res.send({ user: req.user });
+    } catch (error) {
+      console.error("Error in userProfile:", error.message, error.stack);
+      res.status(500).json({
+        status: "failed",
+        message: "Unable to fetch user profile",
+      });
+    }
+  };
+
   static changeUserPassword = async (req, res) => {
     try {
       const { password, password_confirmation } = req.body;
@@ -420,13 +438,14 @@ static getNewAccessToken = async (req, res) => {
         .status(200)
         .json({ status: "success", message: "Password changed successfully" });
     } catch (error) {
-      console.error("Error in changeUserPassword:", error.stack);
+      console.error("Error in changeUserPassword:", error.message, error.stack);
       res.status(500).json({
         status: "failed",
         message: "Unable to change password, please try again later",
       });
     }
   };
+
   static sendUserPasswordResetEmail = async (req, res) => {
     try {
       const { email } = req.body;
@@ -457,13 +476,14 @@ static getNewAccessToken = async (req, res) => {
         message: "Password reset email sent. Please check your email.",
       });
     } catch (error) {
-      console.error("Error in sendUserPasswordResetEmail:", error.stack);
+      console.error("Error in sendUserPasswordResetEmail:", error.message, error.stack);
       res.status(500).json({
         status: "failed",
         message: "Unable to send password reset email. Please try again later",
       });
     }
   };
+
   static userPasswordReset = async (req, res) => {
     try {
       const { password, password_confirmation } = req.body;
@@ -497,7 +517,7 @@ static getNewAccessToken = async (req, res) => {
         .status(200)
         .json({ status: "success", message: "Password reset successfully" });
     } catch (error) {
-      console.log("Error in userPasswordReset:", error.stack);
+      console.error("Error in userPasswordReset:", error.message, error.stack);
       if (error.name === "TokenExpiredError") {
         return res.status(400).json({
           status: "failed",
@@ -510,9 +530,11 @@ static getNewAccessToken = async (req, res) => {
       });
     }
   };
+
   static userLogout = async (req, res) => {
     try {
       const refreshToken = req.cookies.refreshToken;
+      console.log("userLogout - Clearing cookies, refreshToken:", refreshToken);
       await UserRefreshTokenModel.findOneAndUpdate(
         { token: refreshToken },
         { $set: { blacklisted: true } }
@@ -522,13 +544,14 @@ static getNewAccessToken = async (req, res) => {
       res.clearCookie("is_auth");
       res.status(200).json({ status: "success", message: "Logout successful" });
     } catch (error) {
-      console.error("Error in userLogout:", error.stack);
+      console.error("Error in userLogout:", error.message, error.stack);
       res.status(500).json({
         status: "failed",
         message: "Unable to logout, please try again later",
       });
     }
   };
+
   static applyApproval = async (req, res) => {
     try {
       const user = await UserModel.findById(req.user._id);
@@ -576,7 +599,7 @@ static getNewAccessToken = async (req, res) => {
         message: "Application submitted for approval",
       });
     } catch (error) {
-      console.error("Apply approval error:", error.stack);
+      console.error("Error in applyApproval:", error.message, error.stack);
       res.status(500).json({
         status: "failed",
         message: `Failed to apply for approval: ${error.message}`,
@@ -584,4 +607,5 @@ static getNewAccessToken = async (req, res) => {
     }
   };
 }
+
 export default UserController;
