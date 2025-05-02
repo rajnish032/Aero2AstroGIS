@@ -8,9 +8,9 @@ import { useLoginUserMutation } from "@/lib/services/auth";
 import Cookies from "universal-cookie";
 
 const cookies = new Cookies(null, {
-  path: '/',
-  sameSite: 'none',
-  secure: true
+  path: "/",
+  sameSite: "none",
+  secure: true,
 });
 
 const Login = () => {
@@ -50,33 +50,10 @@ const Login = () => {
 
       try {
         const response = await loginUser(values, {
-          credentials: 'include'
+          credentials: "include",
         }).unwrap();
 
         if (response?.status === "success") {
-          // Set cookies with consistent attributes
-          cookies.set("accessToken", response.access_token, {
-            path: "/",
-            maxAge: 3600,
-            sameSite: "none",
-            secure: true,
-          });
-
-          cookies.set("refreshToken", response.refresh_token, {
-            path: "/",
-            maxAge: 86400, // 1 day
-            sameSite: "none",
-            secure: true,
-            httpOnly: false // Must be false for client-side access
-          });
-
-          cookies.set("user", JSON.stringify(response.user || {}), {
-            path: "/",
-            maxAge: 3600,
-            sameSite: "none",
-            secure: true
-          });
-
           setShowSuccess(true);
 
           setTimeout(() => {
@@ -92,7 +69,9 @@ const Login = () => {
           setErrorMessage("Login failed. Please try again.");
         }
       } catch (error) {
-        setErrorMessage(error?.data?.message || "Network error. Please try again.");
+        setErrorMessage(
+          error?.data?.message || "Network error. Please try again."
+        );
       } finally {
         setLoading(false);
       }
@@ -121,7 +100,9 @@ const Login = () => {
                   />
                 </svg>
               </div>
-              <h3 className="mt-3 text-lg font-medium text-gray-900">Login Successful!</h3>
+              <h3 className="mt-3 text-lg font-medium text-gray-900">
+                Login Successful!
+              </h3>
               <div className="mt-2 text-sm text-gray-500">
                 Redirecting you to your profile...
               </div>
@@ -132,7 +113,10 @@ const Login = () => {
 
       <div className="max-w-md w-full space-y-8">
         <div>
-          <Link href="/" className="overflow-clip relative block mx-auto h-24 w-40">
+          <Link
+            href="/"
+            className="overflow-clip relative block mx-auto h-24 w-40"
+          >
             <img
               src="/logo.png"
               className="absolute inset-0 scale-150"
@@ -172,7 +156,9 @@ const Login = () => {
               placeholder="Enter your email"
             />
             {formik.touched.email && formik.errors.email && (
-              <div className="text-sm text-red-500 px-2">{formik.errors.email}</div>
+              <div className="text-sm text-red-500 px-2">
+                {formik.errors.email}
+              </div>
             )}
           </div>
 
@@ -235,7 +221,9 @@ const Login = () => {
               </button>
             </div>
             {formik.touched.password && formik.errors.password && (
-              <div className="text-sm text-red-500 px-2">{formik.errors.password}</div>
+              <div className="text-sm text-red-500 px-2">
+                {formik.errors.password}
+              </div>
             )}
           </div>
 
