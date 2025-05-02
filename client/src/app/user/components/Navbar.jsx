@@ -36,7 +36,7 @@ const ProfileNavbar = () => {
       if (response?.status === 401) {
         try {
           const refreshResponse = await axios.post(
-            `${API_BASE_URL}/api/auth/refresh`,
+            `${API_BASE_URL}/api/auth/refresh-token`,
             {},
             { withCredentials: true }
           );
